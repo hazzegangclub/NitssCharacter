@@ -40,6 +40,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         private bool isBlocking;
         private float blockStamina;
         private bool guardBroken;
+        private bool blockRequest;
 
         private bool isStaggered;
         private float staggerTimer;
@@ -74,9 +75,27 @@ namespace Hazze.Gameplay.Characters.Nitss
             UpdateCombo(dt);
         }
 
+        public void SetBlockRequest(bool wantsBlock)
+        {
+            if (wantsBlock)
+            {
+                blockRequest = true;
+            }
+        }
+
+        public void CancelBlock()
+        {
+            blockRequest = false;
+            if (isBlocking)
+            {
+                isBlocking = false;
+            }
+        }
+
         private void UpdateBlocking(float dt)
         {
-            bool wantsBlock = input != null && input.Current.BlockHeld;
+            bool wantsBlock = blockRequest;
+            blockRequest = false;
             if (guardBroken)
             {
                 wantsBlock = false;

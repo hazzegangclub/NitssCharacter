@@ -13,6 +13,8 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssAnimatorController animatorController;
         [SerializeField] private Rigidbody body;
         [SerializeField] private Animator animator;
+        [SerializeField] private NitssCrouchModule crouchModule;
+        [SerializeField] private NitssBlockModule blockModule;
 
         [Header("Dash")]
         [SerializeField, Tooltip("Horizontal speed applied when the dash starts (m/s).")]
@@ -64,6 +66,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             animatorController = context ? context.AnimatorController : GetComponentInChildren<NitssAnimatorController>();
             body = context ? context.Body : GetComponentInChildren<Rigidbody>();
             animator = context && context.Animator ? context.Animator : GetComponentInChildren<Animator>();
+            crouchModule = GetComponent<NitssCrouchModule>();
+            blockModule = GetComponent<NitssBlockModule>();
             jumpFallStateHash = string.IsNullOrWhiteSpace(jumpFallStateName) ? 0 : Animator.StringToHash(jumpFallStateName);
         }
 
@@ -145,6 +149,9 @@ namespace Hazze.Gameplay.Characters.Nitss
 
         private void StartDash(Vector3 direction)
         {
+            crouchModule?.ForceExitCrouch();
+            blockModule?.ForceBlockRelease();
+
             dashDirection = direction;
             lastDashPressedTime = float.NegativeInfinity;
             pendingJumpResumeDelay = 0f;
@@ -274,6 +281,14 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (animator == null)
             {
                 animator = GetComponentInChildren<Animator>();
+            }
+            if (!crouchModule)
+            {
+                crouchModule = GetComponent<NitssCrouchModule>();
+            }
+            if (!blockModule)
+            {
+                blockModule = GetComponent<NitssBlockModule>();
             }
             if (jumpFallStateHash == 0)
             {

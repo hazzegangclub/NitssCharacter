@@ -40,6 +40,9 @@ namespace Hazze.Gameplay.Characters.Nitss
         private float desiredSpeedX;
         private float forcedVelocityTimer;
         private float forcedVelocityX;
+        private bool movementLocked;
+        private int movementLockRefCount;
+        private bool useCrouchYaw;
 
         // Expostos para outros sistemas
         public bool IsGrounded => isGrounded;
@@ -47,6 +50,12 @@ namespace Hazze.Gameplay.Characters.Nitss
         public bool IsAirForAttacks => jumpModule ? jumpModule.IsAirborne : !isGrounded;
         public bool IsInDoubleJumpWindow => jumpModule && jumpModule.CanPerformDoubleJump;
         public bool DidDoubleJumpThisAirborne => jumpModule && jumpModule.HasDoubleJumpedThisAirborne;
+        public bool MovementLocked => movementLocked;
+
+        private const float DefaultStationaryYawRight = 110f;
+        private const float DefaultStationaryYawLeft = 250f;
+        private const float CrouchStationaryYawRight = 110f;
+        private const float CrouchStationaryYawLeft = 250f;
 
         private void Awake()
         {
@@ -95,6 +104,11 @@ namespace Hazze.Gameplay.Characters.Nitss
             {
                 desiredSpeedX = 0f;
             }
+
+            if (movementLocked)
+            {
+                desiredSpeedX = 0f;
+            }
         }
 
         private void UpdateGroundState()
@@ -116,6 +130,12 @@ namespace Hazze.Gameplay.Characters.Nitss
             bool overrideActive = forcedVelocityTimer > 0f;
             float targetSpeed = overrideActive ? forcedVelocityX : desiredSpeedX;
 
+            if (movementLocked)
+            {
+                overrideActive = true;
+                targetSpeed = 0f;
+            }
+
             Vector3 velocity = body.linearVelocity;
             float current = velocity.x;
             float next;
@@ -130,16 +150,22 @@ namespace Hazze.Gameplay.Characters.Nitss
             }
             velocity.x = next;
 
-            if (planarPush.sqrMagnitude > 0f)
+            if (!movementLocked && planarPush.sqrMagnitude > 0f)
             {
                 velocity += planarPush;
                 planarPush = Vector3.Lerp(planarPush, Vector3.zero, dt * 5f);
+            }
+            else if (movementLocked)
+            {
+                planarPush = Vector3.zero;
             }
 
             velocity.z = 0f;
             body.linearVelocity = velocity;
 
-            if (Mathf.Abs(next) > 0.05f)
+            bool stationary = movementLocked || Mathf.Abs(next) <= 0.05f;
+
+            if (!stationary)
             {
                 float facingX = Mathf.Sign(next);
                 if (!Mathf.Approximately(facingX, facingDirection.x))
@@ -157,15 +183,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         private void RotateVisual(float dt, bool stationary)
         {
             if (!visual) return;
-            float targetYaw;
-            if (stationary)
-            {
-                targetYaw = facingDirection.x >= 0f ? 165f : 230f;
-            }
-            else
-            {
-                targetYaw = facingDirection.x >= 0f ? 110f : 250f;
-            }
+            float targetYaw = stationary ? GetStationaryYaw() : GetMovingYaw();
             smoothedYaw = Mathf.MoveTowardsAngle(smoothedYaw, targetYaw, dt * 720f);
             visual.localEulerAngles = new Vector3(0f, smoothedYaw, 0f);
         }
@@ -284,6 +302,113 @@ namespace Hazze.Gameplay.Characters.Nitss
                 v.y = cap;
                 body.linearVelocity = v;
             }
+        }
+
+        public void AddMovementLock()
+        {
+            if (movementLockRefCount++ == 0)
+            {
+                ApplyMovementLockState(true);
+            }
+        }
+
+        public void RemoveMovementLock()
+        {
+            if (movementLockRefCount == 0)
+            {
+                return;
+            }
+
+            movementLockRefCount--;
+            if (movementLockRefCount == 0)
+            {
+                ApplyMovementLockState(false);
+            }
+        }
+
+        private void ApplyMovementLockState(bool locked)
+        {
+            movementLocked = locked;
+
+            if (!body)
+            {
+                return;
+            }
+
+            if (locked)
+            {
+                desiredSpeedX = 0f;
+                forcedVelocityTimer = 0f;
+                forcedVelocityX = 0f;
+                planarPush = Vector3.zero;
+                Vector3 v = body.linearVelocity;
+                v.x = 0f;
+                body.linearVelocity = v;
+            }
+        }
+
+        public void SetCrouchYawActive(bool active)
+        {
+            if (useCrouchYaw == active)
+            {
+                return;
+            }
+
+            useCrouchYaw = active;
+
+            SnapVisualYaw(true);
+        }
+
+        public void ForceFacingDirection(float horizontalInput)
+        {
+            if (Mathf.Abs(horizontalInput) < 0.05f)
+            {
+                return;
+            }
+
+            float sign = Mathf.Sign(horizontalInput);
+            if (Mathf.Approximately(sign, 0f))
+            {
+                return;
+            }
+
+            if (Mathf.Approximately(facingDirection.x, sign))
+            {
+                if (movementLocked)
+                {
+                    SnapVisualYaw(true);
+                }
+                return;
+            }
+
+            facingDirection = new Vector3(sign, 0f, 0f);
+            SnapVisualYaw(true);
+        }
+
+        private float GetStationaryYaw()
+        {
+            if (facingDirection.x >= 0f)
+            {
+                return useCrouchYaw ? CrouchStationaryYawRight : DefaultStationaryYawRight;
+            }
+            return useCrouchYaw ? CrouchStationaryYawLeft : DefaultStationaryYawLeft;
+        }
+
+        private float GetMovingYaw()
+        {
+            return facingDirection.x >= 0f ? 110f : 250f;
+        }
+
+        private void SnapVisualYaw(bool stationary)
+        {
+            if (!visual)
+            {
+                return;
+            }
+
+            float targetYaw = stationary ? GetStationaryYaw() : GetMovingYaw();
+            smoothedYaw = targetYaw;
+            visual.localEulerAngles = new Vector3(0f, smoothedYaw, 0f);
         }
     }
 }

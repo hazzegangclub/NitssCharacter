@@ -1,3 +1,12 @@
+# NitssCharacter 0.02 (2025-11-19)
+
+Adds dedicated dash and jump modules along with updated locomotion integration.
+
+## Highlights
+- Introduces `NitssDashModule` with air dash polish and JumpFall recovery control
+- Adds `NitssJumpModule` supporting buffered jumps, double jump trigger e ajustes anti-loop
+- Atualiza `NitssMovementController` e `NitssLocomotionController` para dar suporte aos novos módulos
+
 # NitssCharacter 0.01 (2025-11-18)
 
 Initial Nitss character package for Unity via UPM.

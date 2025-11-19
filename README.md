@@ -6,6 +6,7 @@ Apenas os scripts do personagem Nitss, organizados por domínio. Pensado para vi
 - `Runtime/Nitss/Core` — contexto e glue do personagem
 - `Runtime/Nitss/Input` — leitura de input
 - `Runtime/Nitss/Movement` — locomoção
+- `Runtime/Nitss/Modules` — extensões de pulo/dash e outros comportamentos
 - `Runtime/Nitss/Combat` — combate básico
 - `Runtime/Nitss/Locomotion` — orquestração de ciclo de jogo
 - `Runtime/Nitss/Animation` — ponte com Animator

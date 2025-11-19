@@ -33,6 +33,8 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssInputReader inputReader;
         [SerializeField] private NitssMovementController movement;
         [SerializeField] private NitssCombatController combat;
+        [SerializeField] private NitssJumpModule jumpModule;
+        [SerializeField] private NitssDashModule dashModule;
 
         private void Reset()
         {
@@ -40,6 +42,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             inputReader = GetComponent<NitssInputReader>();
             movement = GetComponent<NitssMovementController>();
             combat = GetComponent<NitssCombatController>();
+            jumpModule = GetComponent<NitssJumpModule>();
+            dashModule = GetComponent<NitssDashModule>();
         }
 
         private void Awake()
@@ -48,6 +52,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (!inputReader) inputReader = GetComponent<NitssInputReader>();
             if (!movement) movement = GetComponent<NitssMovementController>();
             if (!combat) combat = GetComponent<NitssCombatController>();
+            if (!jumpModule) jumpModule = GetComponent<NitssJumpModule>();
+            if (!dashModule) dashModule = GetComponent<NitssDashModule>();
 
             if (combat != null)
             {
@@ -74,6 +80,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             float dt = Time.deltaTime;
             movement.Tick(dt, inputReader);
             combat.Tick(dt, inputReader);
+            jumpModule?.Tick(dt, inputReader);
+            dashModule?.Tick(dt, inputReader);
         }
 
         private void HandleAttackStageStarted(int stage, bool isAir)

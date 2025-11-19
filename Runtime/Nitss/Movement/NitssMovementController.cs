@@ -3,7 +3,7 @@ using UnityEngine;
 namespace Hazze.Gameplay.Characters.Nitss
 {
     /// <summary>
-    /// Implementação simplificada de movimento para o Nitss. Controla aceleração, pulo e dash.
+    /// Implementação simplificada de movimento para o Nitss. Controla aceleração horizontal e integra módulos de pulo.
     /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(NitssCharacterContext))]
@@ -28,6 +28,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         private NitssCharacterContext context;
         private NitssInputReader input;
         private NitssAnimatorController animatorController;
+        private NitssJumpModule jumpModule;
         private Rigidbody body;
         private Transform visual;
         private float smoothedYaw;
@@ -37,19 +38,22 @@ namespace Hazze.Gameplay.Characters.Nitss
         private Vector3 facingDirection = Vector3.right;
         private float animatorSpeed01;
         private float desiredSpeedX;
+        private float forcedVelocityTimer;
+        private float forcedVelocityX;
 
         // Expostos para outros sistemas
         public bool IsGrounded => isGrounded;
         public Vector3 FacingDirection => facingDirection;
-        public bool IsAirForAttacks => !isGrounded;
-        public bool IsInDoubleJumpWindow => false;
-        public bool DidDoubleJumpThisAirborne => false;
+        public bool IsAirForAttacks => jumpModule ? jumpModule.IsAirborne : !isGrounded;
+        public bool IsInDoubleJumpWindow => jumpModule && jumpModule.CanPerformDoubleJump;
+        public bool DidDoubleJumpThisAirborne => jumpModule && jumpModule.HasDoubleJumpedThisAirborne;
 
         private void Awake()
         {
             context = GetComponent<NitssCharacterContext>();
             input = context ? context.InputReader : null;
             animatorController = context ? context.AnimatorController : null;
+            jumpModule = GetComponent<NitssJumpModule>();
             body = context ? context.Body : null;
             visual = context ? context.VisualRoot : transform;
 
@@ -104,12 +108,26 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (!body) return;
 
             float dt = Time.fixedDeltaTime;
-            float targetSpeed = desiredSpeedX;
+            if (forcedVelocityTimer > 0f)
+            {
+                forcedVelocityTimer = Mathf.Max(0f, forcedVelocityTimer - dt);
+            }
+
+            bool overrideActive = forcedVelocityTimer > 0f;
+            float targetSpeed = overrideActive ? forcedVelocityX : desiredSpeedX;
 
             Vector3 velocity = body.linearVelocity;
             float current = velocity.x;
-            float accel = Mathf.Abs(targetSpeed) > Mathf.Abs(current) ? acceleration : deceleration;
-            float next = Mathf.MoveTowards(current, targetSpeed, accel * dt);
+            float next;
+            if (overrideActive)
+            {
+                next = targetSpeed;
+            }
+            else
+            {
+                float accel = Mathf.Abs(targetSpeed) > Mathf.Abs(current) ? acceleration : deceleration;
+                next = Mathf.MoveTowards(current, targetSpeed, accel * dt);
+            }
             velocity.x = next;
 
             if (planarPush.sqrMagnitude > 0f)
@@ -128,11 +146,11 @@ namespace Hazze.Gameplay.Characters.Nitss
                 {
                     facingDirection = new Vector3(facingX, 0f, 0f);
                 }
-                RotateVisual(Time.fixedDeltaTime, false);
+                RotateVisual(dt, false);
             }
             else
             {
-                RotateVisual(Time.fixedDeltaTime, true);
+                RotateVisual(dt, true);
             }
         }
 
@@ -157,6 +175,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (animatorController == null && context != null)
             {
                 animatorController = context.AnimatorController;
+            }
+            if (jumpModule == null && context != null)
+            {
+                jumpModule = GetComponent<NitssJumpModule>();
             }
             if (animatorController == null)
             {
@@ -216,6 +238,17 @@ namespace Hazze.Gameplay.Characters.Nitss
         public void ForceAirborneStateForCombo()
         {
             isGrounded = false;
+        }
+
+        public void ForceHorizontalVelocity(float velocityX, float duration)
+        {
+            forcedVelocityX = velocityX;
+            forcedVelocityTimer = Mathf.Max(forcedVelocityTimer, Mathf.Max(0f, duration));
+            desiredSpeedX = velocityX;
+            if (Mathf.Abs(velocityX) > 0.01f)
+            {
+                facingDirection = new Vector3(Mathf.Sign(velocityX), 0f, 0f);
+            }
         }
 
         public void RegisterKnockdownEntryImpulse(Vector3 planarImpulse)

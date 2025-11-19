@@ -196,6 +196,17 @@ namespace Hazze.Gameplay.Characters.Nitss
             {
                 if (keyboardAttackKey != KeyCode.None && Input.GetKey(keyboardAttackKey)) held = true;
                 try { held |= Input.GetButton(legacyAttackButton); } catch { }
+                if (!held)
+                {
+                    try
+                    {
+                        if (Input.GetKey(KeyCode.JoystickButton0))
+                        {
+                            held = true;
+                        }
+                    }
+                    catch { }
+                }
             }
             return held;
         }

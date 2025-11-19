@@ -33,8 +33,11 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssInputReader inputReader;
         [SerializeField] private NitssMovementController movement;
         [SerializeField] private NitssCombatController combat;
+        [SerializeField] private NitssCrouchModule crouchModule;
+        [SerializeField] private NitssBlockModule blockModule;
         [SerializeField] private NitssJumpModule jumpModule;
         [SerializeField] private NitssDashModule dashModule;
+        [SerializeField] private NitssGroundAttackModule groundAttackModule;
 
         private void Reset()
         {
@@ -42,8 +45,11 @@ namespace Hazze.Gameplay.Characters.Nitss
             inputReader = GetComponent<NitssInputReader>();
             movement = GetComponent<NitssMovementController>();
             combat = GetComponent<NitssCombatController>();
+            crouchModule = GetComponent<NitssCrouchModule>();
+            blockModule = GetComponent<NitssBlockModule>();
             jumpModule = GetComponent<NitssJumpModule>();
             dashModule = GetComponent<NitssDashModule>();
+            groundAttackModule = GetComponent<NitssGroundAttackModule>();
         }
 
         private void Awake()
@@ -52,8 +58,11 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (!inputReader) inputReader = GetComponent<NitssInputReader>();
             if (!movement) movement = GetComponent<NitssMovementController>();
             if (!combat) combat = GetComponent<NitssCombatController>();
+            if (!crouchModule) crouchModule = GetComponent<NitssCrouchModule>();
+            if (!blockModule) blockModule = GetComponent<NitssBlockModule>();
             if (!jumpModule) jumpModule = GetComponent<NitssJumpModule>();
             if (!dashModule) dashModule = GetComponent<NitssDashModule>();
+            if (!groundAttackModule) groundAttackModule = GetComponent<NitssGroundAttackModule>();
 
             if (combat != null)
             {
@@ -78,8 +87,12 @@ namespace Hazze.Gameplay.Characters.Nitss
 
             inputReader.Sample();
             float dt = Time.deltaTime;
+            crouchModule?.Tick(dt, inputReader);
             movement.Tick(dt, inputReader);
+            groundAttackModule?.Tick(dt, inputReader);
+            blockModule?.PreCombatTick(dt, inputReader);
             combat.Tick(dt, inputReader);
+            blockModule?.PostCombatTick();
             jumpModule?.Tick(dt, inputReader);
             dashModule?.Tick(dt, inputReader);
         }

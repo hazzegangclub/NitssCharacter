@@ -24,6 +24,10 @@ namespace Hazze.Gameplay.Characters.Nitss
         [Header("Knockdown")]
         [SerializeField] private float knockdownDuration = 1.5f;
 
+        [Header("Input")]
+        [SerializeField, Tooltip("Quando verdadeiro, o controlador usa AttackPressed do InputReader diretamente (modo legado).")]
+        private bool useInternalAttackInput;
+
         public event Action<int, bool> AttackStageStarted;
         public event Action<int, bool> AttackStageEnded;
         public event Action<bool> KnockdownStateChanged;
@@ -114,9 +118,9 @@ namespace Hazze.Gameplay.Characters.Nitss
         private void UpdateCombo(float dt)
         {
             if (IsKnockedDown) return;
-            if (input != null && input.AttackPressed)
+            if (useInternalAttackInput && input != null && input.AttackPressed)
             {
-                StartNextStage();
+                TryStartNextStage(out _, out _);
             }
 
             if (stageTimer > 0f)
@@ -138,11 +142,45 @@ namespace Hazze.Gameplay.Characters.Nitss
             }
         }
 
-        private void StartNextStage()
+        public bool TryRequestAttackStage(out int stage, out bool isAir)
         {
+            if (IsKnockedDown)
+            {
+                stage = 0;
+                isAir = false;
+                return false;
+            }
+
+            return TryStartNextStage(out stage, out isAir);
+        }
+
+        public bool CancelActiveAttackStage(bool notify = true)
+        {
+            if (currentStage <= 0)
+            {
+                return false;
+            }
+
+            if (notify)
+            {
+                AttackStageEnded?.Invoke(currentStage, stageIsAir);
+            }
+
+            currentStage = 0;
+            stageTimer = 0f;
+            comboResetTimer = 0f;
+            stageIsAir = false;
+            return true;
+        }
+
+        private bool TryStartNextStage(out int stage, out bool isAir)
+        {
+            stage = 0;
+            isAir = false;
+
             if (isStaggered)
             {
-                return;
+                return false;
             }
 
             if (comboResetTimer <= 0f)
@@ -153,6 +191,9 @@ namespace Hazze.Gameplay.Characters.Nitss
             stageTimer = comboStageDuration;
             stageIsAir = movement && !movement.IsGrounded;
             AttackStageStarted?.Invoke(currentStage, stageIsAir);
+            stage = currentStage;
+            isAir = stageIsAir;
+            return true;
         }
 
         private void UpdateKnockdown(float dt)

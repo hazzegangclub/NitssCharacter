@@ -1,7 +1,7 @@
 {
   "name": "com.hazzegangclub.nitsscharacter",
   "displayName": "Nitss Character",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "unity": "2023.1",
   "description": "Core Nitss character runtime (movement, combat, input) for Hazze projects.",
   "keywords": [

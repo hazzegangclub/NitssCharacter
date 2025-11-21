@@ -1,3 +1,16 @@
+# NitssCharacter 0.4.2 (2025-11-21)
+
+Adds aerial combo module with staged JumpAttacks after double jump.
+
+## Highlights
+- New `NitssJumpAttackModule` implements JumpAttack1 → JumpAttack2 → JumpAttack3 with configurable delay and window per stage
+- Predictable fallback to JumpFall when next input window expires
+- Light impulse tuning for better aerial feel
+
+## Notes
+- Timings are exposed via inspector fields (attack2/3 min delay + window)
+- Recommended to playtest and fine tune `attack2WindowSeconds` / `attack3WindowSeconds`
+
 # NitssCharacter 0.4.1 (2025-11-19)
 
 Adds Unity `.meta` files so the package imports cleanly when consumed via Git.
@@ -60,4 +73,3 @@ Initial Nitss character package for Unity via UPM.
 
 ## Removed
 - Dash functionality removed from movement controller
-

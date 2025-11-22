@@ -1,3 +1,16 @@
+# NitssCharacter 0.4.3 (2025-11-22)
+
+Introduces configurable heavy "Uppercut" stage integration (ground → launch) and docs updates.
+
+## Highlights
+- Adds heavy uppercut stage concept used by downstream (HazzeGangClubStrikers) for launch combos
+- Documentation: README bump + installation tag update
+- Version metadata bump to 0.4.3 for UPM consumption
+
+## Notes
+- Uppercut stage vertical launch and indexing are defined downstream (main project) until a dedicated module lands
+- Consumers should update manifest to `#0.4.3`
+
 # NitssCharacter 0.4.2 (2025-11-21)
 
 Adds aerial combo module with staged JumpAttacks after double jump.

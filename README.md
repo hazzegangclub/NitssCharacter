@@ -8,12 +8,16 @@ Adicione ao `Packages/manifest.json` do seu projeto Unity:
 ```json
 {
   "dependencies": {
-    "com.hazzegangclub.nitsscharacter": "https://github.com/hazzegangclub/NitssCharacter.git#0.4.2"
+    "com.hazzegangclub.nitsscharacter": "https://github.com/hazzegangclub/NitssCharacter.git#0.4.3"
   }
 }
 ```
 
-Para atualizar de versão, altere apenas o sufixo da tag (por exemplo `#0.4.3`).
+Para atualizar de versão, altere apenas o sufixo da tag (por exemplo `#0.4.4`).
+
+## Novidades 0.4.3
+- Introduz estágio pesado "Uppercut" consumido pelo projeto principal para combos de lançamento.
+- Documentação atualizada e bump de versão do package.
 
 ## Novidades 0.4.2
 - Novo módulo aéreo `NitssJumpAttackModule` com combo JumpAttack1 → JumpAttack2 → JumpAttack3 após double jump.

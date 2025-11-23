@@ -36,8 +36,10 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssCrouchModule crouchModule;
         [SerializeField] private NitssBlockModule blockModule;
         [SerializeField] private NitssJumpModule jumpModule;
+        [SerializeField] private NitssJumpAttackModule jumpAttackModule;
         [SerializeField] private NitssDashModule dashModule;
         [SerializeField] private NitssGroundAttackModule groundAttackModule;
+        [SerializeField] private NitssUppercutModule uppercutModule;
 
         private void Reset()
         {
@@ -48,8 +50,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             crouchModule = GetComponent<NitssCrouchModule>();
             blockModule = GetComponent<NitssBlockModule>();
             jumpModule = GetComponent<NitssJumpModule>();
+            jumpAttackModule = GetComponent<NitssJumpAttackModule>();
             dashModule = GetComponent<NitssDashModule>();
             groundAttackModule = GetComponent<NitssGroundAttackModule>();
+            uppercutModule = GetComponent<NitssUppercutModule>();
         }
 
         private void Awake()
@@ -61,8 +65,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (!crouchModule) crouchModule = GetComponent<NitssCrouchModule>();
             if (!blockModule) blockModule = GetComponent<NitssBlockModule>();
             if (!jumpModule) jumpModule = GetComponent<NitssJumpModule>();
+            if (!jumpAttackModule) jumpAttackModule = GetComponent<NitssJumpAttackModule>();
             if (!dashModule) dashModule = GetComponent<NitssDashModule>();
             if (!groundAttackModule) groundAttackModule = GetComponent<NitssGroundAttackModule>();
+            if (!uppercutModule) uppercutModule = GetComponent<NitssUppercutModule>();
 
             if (combat != null)
             {
@@ -89,11 +95,13 @@ namespace Hazze.Gameplay.Characters.Nitss
             float dt = Time.deltaTime;
             crouchModule?.Tick(dt, inputReader);
             movement.Tick(dt, inputReader);
+            uppercutModule?.Tick(dt, inputReader);
             groundAttackModule?.Tick(dt, inputReader);
             blockModule?.PreCombatTick(dt, inputReader);
             combat.Tick(dt, inputReader);
             blockModule?.PostCombatTick();
             jumpModule?.Tick(dt, inputReader);
+            jumpAttackModule?.Tick(dt, inputReader);
             dashModule?.Tick(dt, inputReader);
         }
 

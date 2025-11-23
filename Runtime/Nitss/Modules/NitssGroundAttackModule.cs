@@ -17,7 +17,9 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssCombatController combatController;
         [SerializeField] private NitssInputReader inputReader;
         [SerializeField] private NitssJumpModule jumpModule;
+        [SerializeField] private NitssJumpAttackModule jumpAttackModule;
         [SerializeField] private NitssDashModule dashModule;
+        [SerializeField] private NitssCrouchModule crouchModule;
 
         [Header("Triggers de Animação")]
         [SerializeField] private string attack1Trigger = "Attack1";
@@ -43,6 +45,8 @@ namespace Hazze.Gameplay.Characters.Nitss
         private int trackedStage;
         private bool comboActive;
         private bool dashCancelHandled;
+        private bool wasAirborneLastFrame;
+        private int landingCooldownFrames;
 
         private void Reset()
         {
@@ -52,7 +56,9 @@ namespace Hazze.Gameplay.Characters.Nitss
             combatController = GetComponent<NitssCombatController>();
             inputReader = GetComponent<NitssInputReader>();
             jumpModule = GetComponent<NitssJumpModule>();
+            jumpAttackModule = GetComponent<NitssJumpAttackModule>();
             dashModule = GetComponent<NitssDashModule>();
+            crouchModule = GetComponent<NitssCrouchModule>();
         }
 
         private void Awake()
@@ -83,6 +89,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             trackedStage = 0;
             comboActive = false;
             dashCancelHandled = false;
+            landingCooldownFrames = 0;
+            wasAirborneLastFrame = false;
         }
 
         public void Tick(float dt, NitssInputReader reader)
@@ -94,7 +102,71 @@ namespace Hazze.Gameplay.Characters.Nitss
 
             inputReader = reader ?? inputReader;
 
+            // Detecta quando acabou de pousar (transição ar → chão)
+            bool isGrounded = movementController != null && movementController.IsGrounded;
+            
+            // Se JumpAttackModule está ativo, não processa NADA (nem landing)
+            if (jumpAttackModule != null && jumpAttackModule.IsAirComboActive)
+            {
+                wasAirborneLastFrame = !isGrounded;
+                return;
+            }
+            
+            if (isGrounded && wasAirborneLastFrame && combatController != null)
+            {
+                Debug.Log($"[GroundAttack] LANDING - Stage antes: {combatController.CurrentStage}, IsComboResetHeld: {combatController.IsComboResetHeld}");
+                
+                // Força reset completo do combo ao pousar após estar no ar
+                // Libera o hold múltiplas vezes para garantir
+                for (int i = 0; i < 5; i++)
+                {
+                    combatController.ReleaseComboReset(true);
+                }
+                
+                Debug.Log($"[GroundAttack] Após ReleaseComboReset - Stage: {combatController.CurrentStage}, IsComboResetHeld: {combatController.IsComboResetHeld}");
+                
+                if (combatController.CurrentStage > 0)
+                {
+                    Debug.Log($"[GroundAttack] Cancelando stage ativo: {combatController.CurrentStage}");
+                    combatController.CancelActiveAttackStage(false);
+                }
+                comboActive = false;
+                trackedStage = 0;
+                comboWindowTimer = 0f;
+                queuedRequest = false;
+                queuedFromCombo = false;
+                queuedTimer = 0f;
+                landingCooldownFrames = 10; // Bloqueia ataques por 10 frames (~0.16s) após pousar
+            }
+            wasAirborneLastFrame = !isGrounded;
+            
+            // Cooldown após pousar - só aplica quando está NO CHÃO
+            if (landingCooldownFrames > 0)
+            {
+                if (isGrounded)
+                {
+                    landingCooldownFrames--;
+                    return; // Não processa ataques durante cooldown
+                }
+                else
+                {
+                    // Se voltou ao ar, limpa o cooldown
+                    landingCooldownFrames = 0;
+                }
+            }
+
             UpdateDashCancelState();
+
+            // Se o combatController não está em ataque mas nosso módulo acha que está, reseta
+            if (comboActive && combatController != null && combatController.CurrentStage == 0)
+            {
+                comboActive = false;
+                trackedStage = 0;
+                comboWindowTimer = 0f;
+                queuedRequest = false;
+                queuedFromCombo = false;
+                queuedTimer = 0f;
+            }
 
             if (comboWindowTimer > 0f)
             {
@@ -119,12 +191,35 @@ namespace Hazze.Gameplay.Characters.Nitss
 
         private void HandleAttackPressed()
         {
+            // Se estiver agachado, deixa o CrouchModule lidar com o ataque
+            if (crouchModule != null && crouchModule.IsCrouching)
+            {
+                return;
+            }
+
+            bool isGrounded = movementController != null && movementController.IsGrounded;
+            
+            // Se JumpAttackModule está ativo (armado ou em combo), não processa NADA
+            if (jumpAttackModule != null && jumpAttackModule.IsAirComboActive)
+            {
+                return;
+            }
+            
+            // Se está no ar após double jump, JumpAttackModule deve processar
+            if (!isGrounded && jumpModule != null && jumpModule.HasDoubleJumpedThisAirborne)
+            {
+                return;
+            }
+            
+            Debug.Log($"[GroundAttack] HandleAttackPressed - isGrounded: {isGrounded}, comboActive: {comboActive}, trackedStage: {trackedStage}, CurrentStage: {combatController?.CurrentStage}");
+
             if (!comboActive)
             {
                 if (!CanStartInitialAttack())
                 {
                     return;
                 }
+                Debug.Log($"[GroundAttack] QueueStage inicial");
                 QueueStage(initialAttackDelay, false);
                 return;
             }
@@ -201,12 +296,17 @@ namespace Hazze.Gameplay.Characters.Nitss
                 return;
             }
 
+            Debug.Log($"[GroundAttack] TryExecuteStageRequest - Antes TryRequestAttackStage, CurrentStage: {combatController.CurrentStage}");
+            
             if (!combatController.TryRequestAttackStage(out var stage, out _))
             {
+                Debug.Log($"[GroundAttack] TryRequestAttackStage FALHOU");
                 queuedFromCombo = false;
                 return;
             }
 
+            Debug.Log($"[GroundAttack] TryRequestAttackStage SUCESSO - stage retornado: {stage}, disparando Attack{stage}");
+            
             FireAnimatorTrigger(stage);
             comboActive = true;
             trackedStage = stage;
@@ -286,9 +386,17 @@ namespace Hazze.Gameplay.Characters.Nitss
             {
                 jumpModule = GetComponent<NitssJumpModule>();
             }
+            if (!jumpAttackModule)
+            {
+                jumpAttackModule = GetComponent<NitssJumpAttackModule>();
+            }
             if (!dashModule)
             {
                 dashModule = GetComponent<NitssDashModule>();
+            }
+            if (!crouchModule)
+            {
+                crouchModule = GetComponent<NitssCrouchModule>();
             }
             return combatController != null;
         }

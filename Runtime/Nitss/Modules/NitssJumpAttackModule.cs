@@ -2,407 +2,282 @@ using UnityEngine;
 
 namespace Hazze.Gameplay.Characters.Nitss
 {
+    /// <summary>
+    /// Gerencia combo aéreo (JumpAttack1→2→3) após double jump.
+    /// Funciona independente, disparando triggers diretamente.
+    /// </summary>
     [DisallowMultipleComponent]
-    [RequireComponent(typeof(NitssCharacterContext))]
     public sealed class NitssJumpAttackModule : MonoBehaviour
     {
-        [Header("Referencias")]
+        [Header("Referências")]
         [SerializeField] private NitssCharacterContext context;
         [SerializeField] private NitssAnimatorController animatorController;
         [SerializeField] private NitssMovementController movementController;
-        [SerializeField] private NitssCombatController combatController;
         [SerializeField] private NitssInputReader inputReader;
         [SerializeField] private NitssJumpModule jumpModule;
         [SerializeField] private Rigidbody body;
 
-        [Header("Fallback")]
-        [SerializeField] private float idleToJumpFallSeconds = 0.45f;
-        [SerializeField] private string jumpFallStateName = "Sword&Shield_JumpFall";
-        [SerializeField] private float jumpFallCrossfade = 0.08f;
-        [SerializeField] private int jumpFallLayerIndex = 0;
-
-        [Header("Triggers de Animacao")]
+        [Header("Triggers de Animação")]
         [SerializeField] private string jumpAttack1Trigger = "JumpAttack1";
         [SerializeField] private string jumpAttack2Trigger = "JumpAttack2";
         [SerializeField] private string jumpAttack3Trigger = "JumpAttack3";
 
-        [Header("Combo Timing")]
-        [SerializeField] private float attack2MinDelaySeconds = 0.08f;
-        [SerializeField] private float attack2WindowSeconds = 0.35f;
-        [SerializeField] private float attack3MinDelaySeconds = 0.08f;
-        [SerializeField] private float attack3WindowSeconds = 0.45f;
+        [Header("Tempos")]
+        [SerializeField, Tooltip("Janela para aceitar próximo input após cada ataque")]
+        private float comboWindow = 0.5f;
+        [SerializeField, Tooltip("Delay antes de disparar o primeiro ataque")]
+        private float initialDelay = 0.05f;
+        [SerializeField, Tooltip("Delay antes dos ataques subsequentes")]
+        private float comboDelay = 0.05f;
 
         [Header("Impulsos")]
-        [SerializeField] private float verticalImpulsePerHit = 2.25f;
-        [SerializeField] private float forwardImpulsePerHit = 1.6f;
+        [SerializeField] private float verticalImpulsePerHit = 2.2f;
+        [SerializeField] private float forwardImpulsePerHit = 1.4f;
 
         [Header("Debug")]
-        [SerializeField] private bool debugLogging;
+        [SerializeField] private bool debugLogging = true;
 
-        private bool doubleJumpArmed;
-        private bool firstAttackAvailable;
-        private bool stageInProgress;
-        private bool holdAcquired;
-        private bool wasGroundedLastFrame;
-        private bool airComboUsedThisAirborne;
-        private int activeStage;
-        private int pendingStage;
-        private float idleTimer;
-        private Animator animator;
-        private int jumpFallStateHash;
-
-        private bool nextStageArmed;
-        private int nextStageCandidate;
-        private float comboDelayTimer;
+        private bool armed;
+        private int currentStage;
+        private bool comboActive;
         private float comboWindowTimer;
+        private bool queuedInput;
+        private float queuedTimer;
+        private bool usedThisAirborne;
+        private bool wasGroundedLastFrame;
 
-        private void Awake()
-        {
-            EnsureReferences();
-            if (combatController != null)
-            {
-                combatController.AttackStageStarted += HandleAttackStageStarted;
-                combatController.AttackStageEnded += HandleAttackStageEnded;
-            }
-            RebuildAnimatorCaches();
-        }
+        public bool IsAirComboActive => armed || comboActive;
 
-        private void OnDestroy()
+        private void Reset()
         {
-            if (combatController != null)
-            {
-                combatController.AttackStageStarted -= HandleAttackStageStarted;
-                combatController.AttackStageEnded -= HandleAttackStageEnded;
-            }
+            context = GetComponent<NitssCharacterContext>();
+            animatorController = context ? context.AnimatorController : GetComponentInChildren<NitssAnimatorController>();
+            movementController = GetComponent<NitssMovementController>();
+            inputReader = GetComponent<NitssInputReader>();
+            jumpModule = GetComponent<NitssJumpModule>();
+            body = GetComponent<Rigidbody>();
         }
 
         private void OnDisable()
         {
-            ReleaseComboHold(true);
             ResetState();
         }
 
         public void Tick(float dt, NitssInputReader reader)
         {
-            if (!EnsureReferences()) return;
-            inputReader = reader ?? inputReader;
-            bool attackPressed = inputReader != null && inputReader.AttackPressed;
-            bool grounded = movementController != null && movementController.IsGrounded;
+            if (!EnsureReferences())
+            {
+                return;
+            }
+            if (reader != null)
+            {
+                inputReader = reader;
+            }
+
+            bool grounded = movementController.IsGrounded;
+
             if (grounded)
             {
                 if (!wasGroundedLastFrame)
                 {
-                    ReleaseComboHold(true);
                     ResetState();
                 }
                 wasGroundedLastFrame = true;
-                idleTimer = 0f;
+                return;
             }
-            else
+            wasGroundedLastFrame = false;
+
+            // Arma após double jump
+            if (!armed && !usedThisAirborne && jumpModule.HasDoubleJumpedThisAirborne)
             {
-                wasGroundedLastFrame = false;
+                ArmCombo();
             }
 
-            bool hasDoubleJumped = jumpModule != null && jumpModule.HasDoubleJumpedThisAirborne;
-            if (hasDoubleJumped && !airComboUsedThisAirborne && !doubleJumpArmed)
+            if (!armed)
             {
-                ArmFirstStage();
-            }
-
-            if (!doubleJumpArmed)
-            {
-                idleTimer = 0f;
                 return;
             }
 
-            UpdateComboTimers(dt);
-
-            if (attackPressed && !stageInProgress)
-            {
-                if (nextStageArmed && comboDelayTimer <= 0f)
-                {
-                    TryStartStage(nextStageCandidate);
-                }
-                else if (firstAttackAvailable)
-                {
-                    TryStartStage(1);
-                }
-            }
-
-            UpdateIdleTimer(dt);
-        }
-
-        private void UpdateComboTimers(float dt)
-        {
-            if (!nextStageArmed) return;
-            if (comboDelayTimer > 0f) comboDelayTimer = Mathf.Max(0f, comboDelayTimer - dt);
-            if (!stageInProgress && comboWindowTimer > 0f)
+            // Update timers
+            if (comboWindowTimer > 0f)
             {
                 comboWindowTimer -= dt;
-                if (comboWindowTimer <= 0f)
+            }
+
+            if (queuedInput && queuedTimer > 0f)
+            {
+                queuedTimer -= dt;
+                if (queuedTimer <= 0f)
                 {
-                    Log($"Janela do JumpAttack{nextStageCandidate} expirou.");
-                    FinishCombo();
+                    ExecuteQueuedAttack();
                 }
             }
+
+            // Handle input
+            bool attackPressed = inputReader.AttackPressed;
+            if (attackPressed)
+            {
+                HandleAttackInput();
+            }
         }
 
-        private void ArmFirstStage()
+        private void ArmCombo()
         {
-            doubleJumpArmed = true;
-            firstAttackAvailable = true;
-            stageInProgress = false;
-            pendingStage = 0;
-            activeStage = 0;
-            idleTimer = 0f;
-            nextStageArmed = false;
-            nextStageCandidate = 0;
+            armed = true;
+            currentStage = 0;
+            comboActive = false;
             comboWindowTimer = 0f;
-            comboDelayTimer = 0f;
-            Log("Combo aereo armado (JumpAttack1 disponivel).");
+            queuedInput = false;
+            queuedTimer = 0f;
+            usedThisAirborne = true;
+            Log("Combo aéreo ARMADO - JumpAttack1 disponível");
         }
 
-        private bool TryStartStage(int stage)
+        private void ResetState()
         {
-            if (combatController == null)
-            {
-                Log($"Sem combatController, cancelando JumpAttack{stage}.");
-                FinishCombo(false);
-                return false;
-            }
-            pendingStage = stage;
-            combatController.OverrideNextStage(stage, true);
-            if (!combatController.TryRequestAttackStage(out int resolvedStage, out bool isAir))
-            {
-                Log($"TryRequestAttackStage falhou para JumpAttack{stage}.");
-                pendingStage = 0;
-                return false;
-            }
-            Log($"TryStartStage({stage}) -> resolved={resolvedStage}, isAir={isAir}");
-            if (!isAir) movementController?.ForceAirborneStateForCombo();
-            if (resolvedStage != stage)
-            {
-                Log($"Estagio inesperado ao iniciar JumpAttack{stage}, cancelando.");
-                combatController.CancelActiveAttackStage();
-                FinishCombo();
-                return false;
-            }
-            if (stage == 1)
-            {
-                firstAttackAvailable = false;
-            }
-            else
-            {
-                nextStageArmed = false;
-                nextStageCandidate = 0;
-                comboWindowTimer = 0f;
-                comboDelayTimer = 0f;
-            }
-            return true;
-        }
-
-        private void HandleAttackStageStarted(int stage, bool isAir)
-        {
-            if (!doubleJumpArmed) return;
-            if (!isAir || stage < 1 || stage > 3) return;
-            stageInProgress = true;
-            airComboUsedThisAirborne = true;
-            activeStage = stage;
-            pendingStage = 0;
-            idleTimer = 0f;
+            armed = false;
+            currentStage = 0;
+            comboActive = false;
             comboWindowTimer = 0f;
-            comboDelayTimer = 0f;
-            if (!holdAcquired)
-            {
-                combatController?.HoldComboReset();
-                holdAcquired = combatController != null;
-            }
-            FireAnimatorTrigger(stage);
-            ApplyImpulse();
-            movementController?.ForceAirborneStateForCombo();
-            Log($"JumpAttack{stage} iniciado.");
+            queuedInput = false;
+            queuedTimer = 0f;
+            usedThisAirborne = false;
+            Log("Reset combo aéreo (pousou)");
         }
 
-        private void HandleAttackStageEnded(int stage, bool isAir)
+        private void HandleAttackInput()
         {
-            if (!isAir || stage != activeStage) return;
-            stageInProgress = false;
-            activeStage = 0;
-            idleTimer = 0f;
-            Log($"JumpAttack{stage} finalizado.");
-            switch (stage)
+            if (!comboActive)
             {
-                case 1:
-                    PrepareNextStage(2, attack2MinDelaySeconds, attack2WindowSeconds);
-                    TryPlayJumpFallVisual();
-                    break;
-                case 2:
-                    PrepareNextStage(3, attack3MinDelaySeconds, attack3WindowSeconds);
-                    TryPlayJumpFallVisual();
-                    break;
-                default:
-                    FinishCombo();
-                    break;
-            }
-        }
-
-        private void PrepareNextStage(int stage, float delaySeconds, float windowSeconds)
-        {
-            if (delaySeconds < 0f) delaySeconds = 0f;
-            if (windowSeconds <= 0f)
-            {
-                FinishCombo();
+                // Primeira vez ou fora da janela
+                if (currentStage == 0)
+                {
+                    QueueAttack(initialDelay);
+                }
                 return;
             }
-            nextStageCandidate = stage;
-            nextStageArmed = true;
-            comboDelayTimer = delaySeconds;
-            comboWindowTimer = windowSeconds;
-            Log($"JumpAttack{stage} liberado apos delay {delaySeconds:F2}s por {windowSeconds:F2}s.");
+
+            // Durante combo ativo
+            if (currentStage >= 3)
+            {
+                return;
+            }
+
+            if (comboWindowTimer > 0f)
+            {
+                QueueAttack(comboDelay);
+            }
         }
 
-        private void FireAnimatorTrigger(int stage)
+        private void QueueAttack(float delay)
         {
-            if (animatorController == null) return;
+            queuedInput = true;
+            queuedTimer = delay;
+            Log($"Input enfileirado para JumpAttack{currentStage + 1} em {delay}s");
+        }
+
+        private void ExecuteQueuedAttack()
+        {
+            queuedInput = false;
+            int nextStage = currentStage + 1;
+            if (nextStage > 3)
+            {
+                return;
+            }
+
+            currentStage = nextStage;
+            comboActive = true;
+            comboWindowTimer = comboWindow;
+
+            FireAnimation(nextStage);
+            ApplyImpulse();
+            movementController.ForceAirborneStateForCombo();
+
+            if (nextStage >= 3)
+            {
+                FinishCombo();
+            }
+        }
+
+        private void FinishCombo()
+        {
+            Log("Combo finalizado");
+            armed = false;
+            comboActive = false;
+            comboWindowTimer = 0f;
+        }
+
+        private void FireAnimation(int stage)
+        {
+            if (animatorController == null)
+            {
+                return;
+            }
+
             string trigger = stage switch
             {
                 1 => jumpAttack1Trigger,
                 2 => jumpAttack2Trigger,
                 3 => jumpAttack3Trigger,
-                _ => string.Empty
+                _ => null
             };
-            if (string.IsNullOrWhiteSpace(trigger))
+
+            if (!string.IsNullOrEmpty(trigger))
             {
-                Log($"Trigger vazio para JumpAttack{stage}.");
-                return;
+                animatorController.SetTrigger(trigger);
+                Log($"Trigger disparado: {trigger}");
             }
-            if (!animatorController.HasTrigger(trigger))
-            {
-                Log($"Trigger {trigger} nao existe no Animator.");
-            }
-            animatorController.ResetTrigger(trigger);
-            animatorController.SetTrigger(trigger);
         }
 
         private void ApplyImpulse()
         {
-            if (movementController != null)
+            if (body == null)
             {
-                Vector3 facing = movementController.FacingDirection;
-                if (forwardImpulsePerHit > 0f && facing.sqrMagnitude > 0.0001f)
-                {
-                    Vector3 planar = facing.normalized; planar.y = 0f;
-                    if (planar.sqrMagnitude < 0.0001f) planar = Vector3.right;
-                    movementController.AddExternalPush(planar * forwardImpulsePerHit);
-                }
-                if (verticalImpulsePerHit > 0f)
-                {
-                    float target = GetCurrentVerticalVelocity() + verticalImpulsePerHit;
-                    movementController.BumpVertical(target);
-                }
+                return;
             }
-            else if (body != null)
-            {
-                Vector3 velocity = body.linearVelocity;
-                velocity.y += verticalImpulsePerHit;
-                velocity.x += Mathf.Sign(transform.right.x) * forwardImpulsePerHit;
-                body.linearVelocity = velocity;
-            }
-        }
 
-        private float GetCurrentVerticalVelocity()
-        {
-            return body != null ? body.linearVelocity.y : 0f;
-        }
-
-        private void FinishCombo(bool playJumpFallVisual = true)
-        {
-            doubleJumpArmed = false;
-            firstAttackAvailable = false;
-            stageInProgress = false;
-            pendingStage = 0;
-            activeStage = 0;
-            nextStageArmed = false;
-            nextStageCandidate = 0;
-            ReleaseComboHold(false);
-            idleTimer = 0f;
-            airComboUsedThisAirborne = true;
-            comboWindowTimer = 0f;
-            comboDelayTimer = 0f;
-            if (playJumpFallVisual) TryPlayJumpFallVisual();
-        }
-
-        private void ReleaseComboHold(bool resetTimer)
-        {
-            if (!holdAcquired) return;
-            combatController?.ReleaseComboReset(resetTimer);
-            holdAcquired = false;
-        }
-
-        private void ResetState()
-        {
-            doubleJumpArmed = false;
-            firstAttackAvailable = false;
-            stageInProgress = false;
-            pendingStage = 0;
-            activeStage = 0;
-            holdAcquired = false;
-            idleTimer = 0f;
-            airComboUsedThisAirborne = false;
-            nextStageArmed = false;
-            nextStageCandidate = 0;
-            comboWindowTimer = 0f;
-            comboDelayTimer = 0f;
-        }
-
-        private void UpdateIdleTimer(float dt)
-        {
-            if (!doubleJumpArmed) { idleTimer = 0f; return; }
-            if (stageInProgress) { idleTimer = 0f; return; }
-            if (idleToJumpFallSeconds <= 0f) return;
-            idleTimer += dt;
-            if (idleTimer >= idleToJumpFallSeconds) ForceJumpFall();
-        }
-
-        private void ForceJumpFall()
-        {
-            Log("ForceJumpFall");
-            idleTimer = 0f;
-            FinishCombo();
-        }
-
-        private void RebuildAnimatorCaches()
-        {
-            if (!string.IsNullOrWhiteSpace(jumpFallStateName)) jumpFallStateHash = Animator.StringToHash(jumpFallStateName);
+            Vector3 velocity = body.linearVelocity;
+            velocity.y = verticalImpulsePerHit;
+            velocity += movementController.transform.forward * forwardImpulsePerHit;
+            body.linearVelocity = velocity;
         }
 
         private bool EnsureReferences()
         {
-            if (!context) context = GetComponent<NitssCharacterContext>();
-            if (!animatorController && context) animatorController = context.AnimatorController;
-            if (!movementController) movementController = GetComponent<NitssMovementController>();
-            if (!combatController) combatController = GetComponent<NitssCombatController>();
-            if (!inputReader && context) inputReader = context.InputReader;
-            if (!jumpModule) jumpModule = GetComponent<NitssJumpModule>();
-            if (!body && context) body = context.Body;
-            if (!animator && context) animator = context.Animator;
-            if (jumpFallStateHash == 0 && !string.IsNullOrWhiteSpace(jumpFallStateName)) jumpFallStateHash = Animator.StringToHash(jumpFallStateName);
-            return combatController != null && movementController != null && jumpModule != null;
-        }
+            if (context == null)
+            {
+                context = GetComponent<NitssCharacterContext>();
+            }
+            if (animatorController == null && context != null)
+            {
+                animatorController = context.AnimatorController;
+            }
+            if (movementController == null)
+            {
+                movementController = GetComponent<NitssMovementController>();
+            }
+            if (inputReader == null)
+            {
+                inputReader = GetComponent<NitssInputReader>();
+            }
+            if (jumpModule == null)
+            {
+                jumpModule = GetComponent<NitssJumpModule>();
+            }
+            if (body == null)
+            {
+                body = GetComponent<Rigidbody>();
+            }
 
-        private void TryPlayJumpFallVisual()
-        {
-            if (movementController != null && movementController.IsGrounded) return;
-            if (!animator) animator = context ? context.Animator : GetComponentInChildren<Animator>();
-            if (animator != null && jumpFallStateHash == 0 && !string.IsNullOrWhiteSpace(jumpFallStateName)) jumpFallStateHash = Animator.StringToHash(jumpFallStateName);
-            if (animator != null && jumpFallStateHash != 0) animator.CrossFadeInFixedTime(jumpFallStateHash, Mathf.Max(0f, jumpFallCrossfade), Mathf.Max(0, jumpFallLayerIndex), 0f);
-            animatorController?.SetJumping(true);
+            return movementController != null && inputReader != null && jumpModule != null && animatorController != null;
         }
 
         private void Log(string message)
         {
-            if (!debugLogging) return;
-            Debug.Log($"[NitssJumpAttackModule] {message}", this);
+            if (debugLogging)
+            {
+                Debug.Log($"[NitssJumpAttackModule] {message}");
+            }
         }
     }
 }

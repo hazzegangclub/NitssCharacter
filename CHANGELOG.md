@@ -1,3 +1,14 @@
+# NitssCharacter 0.4.4 (2025-11-22)
+Consolida o combo aéreo com lógica simplificada, integra uppercut independente e sincroniza todos os módulos com o projeto principal.
+## Highlights
+- `NitssJumpAttackModule` reescrito com fila de ataques, janela configurável e integração direta ao Animator (JumpAttack1/2/3).
+- `NitssUppercutModule` exportado com suporte a stage 4 e triggers sincronizados.
+- `NitssGroundAttackModule`, `NitssCombatController` e `NitssLocomotionController` atualizados para coexistir com combos aéreos.
+- Ajustes em `NitssBlockModule`/`NitssCrouchModule` para respeitar novos estados.
+## Notes
+- Compatível com as animações e GUIDs utilizados na branch principal do jogo.
+- Requer atualizar o prefab do Nitss para referenciar o novo módulo de uppercut.
+
 # NitssCharacter 0.4.3 (2025-11-22)
 
 Introduces configurable heavy "Uppercut" stage integration (ground → launch) and docs updates.

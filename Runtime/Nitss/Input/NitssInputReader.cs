@@ -24,10 +24,10 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private string legacyBlockButton = "Block";
         [SerializeField] private string legacyJumpButton = "Jump";
         [SerializeField] private string legacyDashButton = "Fire3";
-        [SerializeField, Tooltip("Índice do botão de pulo no joystick (KeyCode.JoystickButtonX). No seu mapeamento: Cross = JoystickButton1, Circle = 2, Triangle = 3, Square = 0.")]
-        private int legacyGamepadJumpButtonIndex = 1; // Cross = JoystickButton1 conforme instrução
-        [SerializeField, Tooltip("Quando um joystick estiver conectado, ignora o mapeamento Legacy 'Jump' e usa apenas o índice acima para pulo.")]
-        private bool ignoreLegacyJumpButtonWhenGamepadPresent = true;
+    [SerializeField, Tooltip("Índice do botão de pulo no joystick (KeyCode.JoystickButtonX). No seu mapeamento: Cross = JoystickButton1, Circle = 2, Triangle = 3, Square = 0.")]
+    private int legacyGamepadJumpButtonIndex = 1; // Cross = JoystickButton1 conforme instrução
+    [SerializeField, Tooltip("Quando um joystick estiver conectado, ignora o mapeamento Legacy 'Jump' e usa apenas o índice acima para pulo.")]
+    private bool ignoreLegacyJumpButtonWhenGamepadPresent = true;
 
         [Header("Keyboard Binds")]
         [SerializeField] private KeyCode keyboardAttackKey = KeyCode.J;
@@ -38,10 +38,10 @@ namespace Hazze.Gameplay.Characters.Nitss
 
         [Header("Analog Thresholds")]
         [SerializeField, Range(0.05f, 0.95f)] private float triggerThreshold = 0.5f;
-        [SerializeField, Tooltip("Limiar para considerar o L2 como pressionado (histerese).")]
-        [Range(0f, 1f)] private float blockPressThreshold = 0.35f;
-        [SerializeField, Tooltip("Limiar para considerar o L2 como liberado (histerese). Deve ser menor que o de press.")]
-        [Range(0f, 1f)] private float blockReleaseThreshold = 0.25f;
+    [SerializeField, Tooltip("Limiar para considerar o L2 como pressionado (histerese).")]
+    [Range(0f, 1f)] private float blockPressThreshold = 0.35f;
+    [SerializeField, Tooltip("Limiar para considerar o L2 como liberado (histerese). Deve ser menor que o de press.")]
+    [Range(0f, 1f)] private float blockReleaseThreshold = 0.25f;
 
         public readonly struct Snapshot
         {
@@ -65,16 +65,17 @@ namespace Hazze.Gameplay.Characters.Nitss
 
         private Snapshot previous;
         private Snapshot current;
-        // Latch de histerese + debounce para o Block (evita piscar quando o gatilho oscila)
-        private bool blockLatched;
-        private float blockDebounceTimer;
-        [SerializeField, Tooltip("Tempo mínimo mantendo o estado atual do Block antes de permitir alternância (s)")]
-        private float blockDebounceSeconds = 0.05f;
+    // Latch de histerese + debounce para o Block (evita piscar quando o gatilho oscila)
+    private bool blockLatched;
+    private float blockDebounceTimer;
+    [SerializeField, Tooltip("Tempo mínimo mantendo o estado atual do Block antes de permitir alternância (s)")]
+    private float blockDebounceSeconds = 0.05f;
 
         public Snapshot Current => current;
         public Snapshot Previous => previous;
 
         public bool AttackPressed => current.AttackHeld && !previous.AttackHeld;
+        public bool AttackHeld => current.AttackHeld;
         public bool HeavyAttackPressed => current.HeavyAttackHeld && !previous.HeavyAttackHeld;
         public bool JumpPressed => current.JumpHeld && !previous.JumpHeld;
         public bool DashPressed => current.DashHeld && !previous.DashHeld;

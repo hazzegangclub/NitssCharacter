@@ -32,6 +32,8 @@ namespace Hazze.Gameplay.Characters.Nitss
         public event Action<int, bool> AttackStageEnded;
         public event Action<bool> KnockdownStateChanged;
 
+        private const int MaxOverrideStage = 4;
+
         private NitssCharacterContext context;
         private NitssMovementController movement;
         private NitssInputReader input;
@@ -52,6 +54,9 @@ namespace Hazze.Gameplay.Characters.Nitss
         private bool isKnockedDown;
         private float knockdownTimer;
         private bool knockdownPermanent;
+        private bool comboResetHold;
+        private int nextStageOverride;
+        private bool nextStageOverrideForceAir;
 
         public bool IsBlocking => isBlocking;
         public bool GuardBroken => guardBroken;
@@ -61,6 +66,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         public bool IsStaggered => isStaggered;
         public float KnockdownStaminaNormalized => Mathf.Clamp01(blockStamina / Mathf.Max(1f, blockStaminaMax));
         public float KnockdownStamina => blockStamina;
+        public int CurrentStage => currentStage;
 
         private void Awake()
         {
@@ -138,7 +144,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             }
             else if (comboResetTimer > 0f)
             {
-                comboResetTimer -= dt;
+                if (!comboResetHold)
+                {
+                    comboResetTimer = Mathf.Max(0f, comboResetTimer - dt);
+                }
             }
         }
 
@@ -170,6 +179,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             stageTimer = 0f;
             comboResetTimer = 0f;
             stageIsAir = false;
+            nextStageOverride = 0;
+            nextStageOverrideForceAir = false;
             return true;
         }
 
@@ -178,22 +189,67 @@ namespace Hazze.Gameplay.Characters.Nitss
             stage = 0;
             isAir = false;
 
+            Debug.Log($"[CombatController] TryStartNextStage - currentStage ANTES: {currentStage}, comboResetTimer: {comboResetTimer}");
+
             if (isStaggered)
             {
                 return false;
             }
 
-            if (comboResetTimer <= 0f)
+            if (nextStageOverride > 0)
             {
-                currentStage = 0;
+                currentStage = Mathf.Clamp(nextStageOverride, 1, MaxOverrideStage);
+                stageIsAir = nextStageOverrideForceAir || (movement && !movement.IsGrounded);
+                nextStageOverride = 0;
+                nextStageOverrideForceAir = false;
             }
-            currentStage = Mathf.Clamp(currentStage + 1, 1, 3);
+            else
+            {
+                if (comboResetTimer <= 0f)
+                {
+                    Debug.Log($"[CombatController] comboResetTimer <= 0, zerando currentStage");
+                    currentStage = 0;
+                }
+                currentStage = Mathf.Clamp(currentStage + 1, 1, 3);
+                stageIsAir = movement && !movement.IsGrounded;
+            }
+
+            Debug.Log($"[CombatController] TryStartNextStage - currentStage DEPOIS: {currentStage}, stageIsAir: {stageIsAir}");
+
             stageTimer = comboStageDuration;
-            stageIsAir = movement && !movement.IsGrounded;
             AttackStageStarted?.Invoke(currentStage, stageIsAir);
             stage = currentStage;
             isAir = stageIsAir;
+            comboResetTimer = comboResetTime;
             return true;
+        }
+
+        public void HoldComboReset()
+        {
+            comboResetTimer = Mathf.Max(comboResetTimer, comboResetTime);
+            comboResetHold = true;
+        }
+
+        public void ReleaseComboReset(bool resetTimer = true)
+        {
+            Debug.Log($"[CombatController] ReleaseComboReset(resetTimer={resetTimer}) - currentStage ANTES: {currentStage}, comboResetTimer ANTES: {comboResetTimer}");
+            
+            comboResetHold = false;
+            if (resetTimer)
+            {
+                comboResetTimer = 0f;
+                currentStage = 0; // Zera o stage também para forçar reset do combo
+            }
+            
+            Debug.Log($"[CombatController] ReleaseComboReset - currentStage DEPOIS: {currentStage}, comboResetTimer DEPOIS: {comboResetTimer}");
+        }
+
+        public bool IsComboResetHeld => comboResetHold;
+
+        public void OverrideNextStage(int stage, bool forceAir)
+        {
+            nextStageOverride = Mathf.Clamp(stage, 1, MaxOverrideStage);
+            nextStageOverrideForceAir = forceAir;
         }
 
         private void UpdateKnockdown(float dt)

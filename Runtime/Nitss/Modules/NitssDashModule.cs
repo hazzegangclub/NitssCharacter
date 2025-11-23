@@ -15,6 +15,8 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private Animator animator;
         [SerializeField] private NitssCrouchModule crouchModule;
         [SerializeField] private NitssBlockModule blockModule;
+        [SerializeField] private NitssCombatController combatController;
+        [SerializeField] private NitssGroundAttackModule groundAttackModule;
 
         [Header("Dash")]
         [SerializeField, Tooltip("Horizontal speed applied when the dash starts (m/s).")]
@@ -68,6 +70,8 @@ namespace Hazze.Gameplay.Characters.Nitss
             animator = context && context.Animator ? context.Animator : GetComponentInChildren<Animator>();
             crouchModule = GetComponent<NitssCrouchModule>();
             blockModule = GetComponent<NitssBlockModule>();
+            combatController = GetComponent<NitssCombatController>();
+            groundAttackModule = GetComponent<NitssGroundAttackModule>();
             jumpFallStateHash = string.IsNullOrWhiteSpace(jumpFallStateName) ? 0 : Animator.StringToHash(jumpFallStateName);
         }
 
@@ -151,6 +155,14 @@ namespace Hazze.Gameplay.Characters.Nitss
         {
             crouchModule?.ForceExitCrouch();
             blockModule?.ForceBlockRelease();
+            if (groundAttackModule != null)
+            {
+                groundAttackModule.ForceCancelCombo();
+            }
+            else
+            {
+                combatController?.CancelActiveAttackStage();
+            }
 
             dashDirection = direction;
             lastDashPressedTime = float.NegativeInfinity;
@@ -289,6 +301,14 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (!blockModule)
             {
                 blockModule = GetComponent<NitssBlockModule>();
+            }
+            if (!combatController)
+            {
+                combatController = GetComponent<NitssCombatController>();
+            }
+            if (!groundAttackModule)
+            {
+                groundAttackModule = GetComponent<NitssGroundAttackModule>();
             }
             if (jumpFallStateHash == 0)
             {

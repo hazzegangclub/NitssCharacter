@@ -25,14 +25,14 @@ namespace Hazze.Gameplay.Characters.Nitss
         public UnityEvent<float, float> onHealthChanged;
         public UnityEvent onHealthDepleted;
 
-        private float maxHealth;
+    private float maxHealth;
         private float currentHealth;
         private Coroutine pollRoutine;
         private bool pushInFlight;
-        [Header("Push Settings")]
-        [SerializeField, Tooltip("Quando true, envia também o 'max' no payload de push. Mantenha false para evitar sobrescrever o valor vindo da API.")]
-        private bool includeMaxInPush = false;
-        private bool hasRemoteMax = false;
+    [Header("Push Settings")]
+    [SerializeField, Tooltip("Quando true, envia também o 'max' no payload de push. Mantenha false para evitar sobrescrever o valor vindo da API.")]
+    private bool includeMaxInPush = false;
+    private bool hasRemoteMax = false;
         public bool HasRemoteMax => hasRemoteMax;
 
         public float MaxHealth => maxHealth;

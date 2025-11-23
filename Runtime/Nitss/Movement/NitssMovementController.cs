@@ -29,6 +29,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         private NitssInputReader input;
         private NitssAnimatorController animatorController;
         private NitssJumpModule jumpModule;
+        private NitssCombatController combatController;
         private Rigidbody body;
         private Transform visual;
         private float smoothedYaw;
@@ -52,7 +53,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         public bool DidDoubleJumpThisAirborne => jumpModule && jumpModule.HasDoubleJumpedThisAirborne;
         public bool MovementLocked => movementLocked;
 
-        private const float DefaultStationaryYawRight = 110f;
+        private const float DefaultStationaryYawRight = 165f;
         private const float DefaultStationaryYawLeft = 250f;
         private const float CrouchStationaryYawRight = 110f;
         private const float CrouchStationaryYawLeft = 250f;
@@ -63,6 +64,7 @@ namespace Hazze.Gameplay.Characters.Nitss
             input = context ? context.InputReader : null;
             animatorController = context ? context.AnimatorController : null;
             jumpModule = GetComponent<NitssJumpModule>();
+            combatController = GetComponent<NitssCombatController>();
             body = context ? context.Body : null;
             visual = context ? context.VisualRoot : transform;
 
@@ -105,6 +107,12 @@ namespace Hazze.Gameplay.Characters.Nitss
                 desiredSpeedX = 0f;
             }
 
+            float speedCap = GetAttackMoveSpeedCap();
+            if (speedCap > 0f)
+            {
+                desiredSpeedX = Mathf.Clamp(desiredSpeedX, -speedCap, speedCap);
+            }
+
             if (movementLocked)
             {
                 desiredSpeedX = 0f;
@@ -130,6 +138,12 @@ namespace Hazze.Gameplay.Characters.Nitss
             bool overrideActive = forcedVelocityTimer > 0f;
             float targetSpeed = overrideActive ? forcedVelocityX : desiredSpeedX;
 
+            float speedCap = GetAttackMoveSpeedCap();
+            if (speedCap > 0f)
+            {
+                targetSpeed = Mathf.Clamp(targetSpeed, -speedCap, speedCap);
+            }
+
             if (movementLocked)
             {
                 overrideActive = true;
@@ -149,6 +163,11 @@ namespace Hazze.Gameplay.Characters.Nitss
                 next = Mathf.MoveTowards(current, targetSpeed, accel * dt);
             }
             velocity.x = next;
+
+            if (speedCap > 0f)
+            {
+                velocity.x = Mathf.Clamp(velocity.x, -speedCap, speedCap);
+            }
 
             if (!movementLocked && planarPush.sqrMagnitude > 0f)
             {
@@ -183,7 +202,16 @@ namespace Hazze.Gameplay.Characters.Nitss
         private void RotateVisual(float dt, bool stationary)
         {
             if (!visual) return;
-            float targetYaw = stationary ? GetStationaryYaw() : GetMovingYaw();
+            bool attacking = combatController != null && combatController.IsAttacking;
+            float targetYaw;
+            if (attacking)
+            {
+                targetYaw = GetAttackYaw();
+            }
+            else
+            {
+                targetYaw = stationary ? GetStationaryYaw() : GetMovingYaw();
+            }
             smoothedYaw = Mathf.MoveTowardsAngle(smoothedYaw, targetYaw, dt * 720f);
             visual.localEulerAngles = new Vector3(0f, smoothedYaw, 0f);
         }
@@ -197,6 +225,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (jumpModule == null && context != null)
             {
                 jumpModule = GetComponent<NitssJumpModule>();
+            }
+            if (!combatController)
+            {
+                combatController = GetComponent<NitssCombatController>();
             }
             if (animatorController == null)
             {
@@ -397,6 +429,26 @@ namespace Hazze.Gameplay.Characters.Nitss
         private float GetMovingYaw()
         {
             return facingDirection.x >= 0f ? 110f : 250f;
+        }
+
+        private float GetAttackYaw()
+        {
+            return facingDirection.x >= 0f ? 110f : 250f;
+        }
+
+        private float GetAttackMoveSpeedCap()
+        {
+            if (!combatController)
+            {
+                combatController = GetComponent<NitssCombatController>();
+            }
+
+            if (combatController != null && combatController.IsAttacking)
+            {
+                return Mathf.Max(0f, walkAnimationSpeed);
+            }
+
+            return 0f;
         }
 
         private void SnapVisualYaw(bool stationary)

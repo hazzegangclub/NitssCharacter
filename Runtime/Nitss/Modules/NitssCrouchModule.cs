@@ -2,6 +2,10 @@ using UnityEngine;
 
 namespace Hazze.Gameplay.Characters.Nitss
 {
+    /// <summary>
+    /// Orquestra o estado de agachamento do Nitss, travando movimento quando o jogador segura para baixo
+    /// e disparamos animações contextuais (ataque agachado, bloqueio agachado via módulo de block).
+    /// </summary>
     [DisallowMultipleComponent]
     [RequireComponent(typeof(NitssCharacterContext))]
     public sealed class NitssCrouchModule : MonoBehaviour
@@ -16,11 +20,14 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField, Range(-1f, 0f)] private float crouchPressThreshold = -0.6f;
         [SerializeField, Range(-1f, 0f)] private float crouchReleaseThreshold = -0.3f;
         [SerializeField] private string crouchAttackTrigger = "CrouchAttack";
-        [SerializeField] private bool lockMovementWhileCrouched = true;
+        [SerializeField, Tooltip("Quando verdadeiro, permite travar o movimento mesmo durante pulsos curtos de crouch.")]
+        private bool lockMovementWhileCrouched = true;
 
         private bool isCrouching;
         private bool movementLockApplied;
         private bool suppressUntilRelease;
+
+        public bool IsCrouching => isCrouching;
 
         private void Reset()
         {

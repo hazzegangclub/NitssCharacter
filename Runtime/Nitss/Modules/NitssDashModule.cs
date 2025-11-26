@@ -27,6 +27,10 @@ namespace Hazze.Gameplay.Characters.Nitss
         private float dashCooldown = 0.35f;
         [SerializeField, Tooltip("Buffer window to consume a dash input (seconds).")]
         private float dashBufferTime = 0.12f;
+        [SerializeField, Tooltip("Tempo de desaceleração após o dash terminar (s). 0 = para instantaneamente.")]
+        private float dashDecelerationTime = 0.15f;
+        [SerializeField, Tooltip("Velocidade mínima para aplicar desaceleração (m/s). Abaixo disso, para instantaneamente.")]
+        private float minDecelerationSpeed = 2f;
         [SerializeField, Tooltip("Allow air dashes.")]
         private bool allowAirDash = false;
         [SerializeField, Tooltip("Speed multiplier applied to air dashes.")]
@@ -55,8 +59,11 @@ namespace Hazze.Gameplay.Characters.Nitss
         private bool applyJumpAfterDash;
         private float pendingJumpResumeDelay;
         private int jumpFallStateHash;
+        private bool isDecelerating;
+        private float decelerationTimer;
+        private float decelerationStartSpeed;
 
-        public bool IsDashing => activeTimer > 0f;
+        public bool IsDashing => activeTimer > 0f || isDecelerating;
         public bool IsReady => cooldownTimer <= 0f;
         public bool ShouldHoldJumpState => overrideJumpBoolWhileDashing && (IsDashing || (applyJumpAfterDash && pendingJumpResumeDelay > 0f));
 
@@ -105,6 +112,23 @@ namespace Hazze.Gameplay.Characters.Nitss
                 if (activeTimer <= 0f)
                 {
                     FinishDash();
+                }
+            }
+            else if (isDecelerating)
+            {
+                decelerationTimer -= dt;
+                ApplyDeceleration();
+                
+                if (decelerationTimer <= 0f)
+                {
+                    isDecelerating = false;
+                    // Para completamente
+                    if (body != null)
+                    {
+                        Vector3 vel = body.linearVelocity;
+                        vel.x = 0f;
+                        body.linearVelocity = vel;
+                    }
                 }
             }
 
@@ -321,6 +345,18 @@ namespace Hazze.Gameplay.Characters.Nitss
 
         private void FinishDash()
         {
+            // Inicia desaceleração se configurado
+            if (dashDecelerationTime > 0f && body != null)
+            {
+                float currentSpeed = Mathf.Abs(body.linearVelocity.x);
+                if (currentSpeed >= minDecelerationSpeed)
+                {
+                    isDecelerating = true;
+                    decelerationTimer = dashDecelerationTime;
+                    decelerationStartSpeed = currentSpeed * Mathf.Sign(dashDirection.x);
+                }
+            }
+            
             if (!animatorController)
             {
                 applyJumpAfterDash = false;
@@ -339,6 +375,19 @@ namespace Hazze.Gameplay.Characters.Nitss
                     CompleteAirDashRecovery();
                 }
             }
+        }
+
+        private void ApplyDeceleration()
+        {
+            if (body == null || decelerationTimer <= 0f) return;
+            
+            // Interpola de decelerationStartSpeed até 0
+            float t = 1f - (decelerationTimer / dashDecelerationTime);
+            float targetSpeed = Mathf.Lerp(decelerationStartSpeed, 0f, t);
+            
+            Vector3 vel = body.linearVelocity;
+            vel.x = targetSpeed;
+            body.linearVelocity = vel;
         }
 
         private void CompleteAirDashRecovery()

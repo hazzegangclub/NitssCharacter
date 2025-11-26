@@ -18,6 +18,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssAnimatorController animatorController;
         [SerializeField] private Rigidbody body;
         [SerializeField] private NitssDashModule dashModule;
+        [SerializeField] private Hazze.Gameplay.Combat.Damageable damageable;
 
         [Header("Jump")]
         [SerializeField, Tooltip("Upward velocity applied on the first jump (m/s).")]
@@ -87,6 +88,7 @@ namespace Hazze.Gameplay.Characters.Nitss
             animatorController = context ? context.AnimatorController : GetComponentInChildren<NitssAnimatorController>();
             body = context ? context.Body : GetComponentInChildren<Rigidbody>();
             dashModule = GetComponent<NitssDashModule>();
+            damageable = GetComponent<Hazze.Gameplay.Combat.Damageable>() ?? GetComponentInParent<Hazze.Gameplay.Combat.Damageable>();
         }
 
         private void Awake()
@@ -319,6 +321,11 @@ namespace Hazze.Gameplay.Characters.Nitss
             {
                 shouldBeJumping = false;
             }
+            // Não seta IsJumping se o personagem está em air juggle
+            if (damageable != null && damageable.IsInAirJuggle)
+            {
+                shouldBeJumping = false;
+            }
             if (shouldBeJumping != lastAnimatorJumpState)
             {
                 animatorController.SetJumping(shouldBeJumping);
@@ -351,6 +358,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (!dashModule)
             {
                 dashModule = GetComponent<NitssDashModule>();
+            }
+            if (!damageable)
+            {
+                damageable = GetComponent<Hazze.Gameplay.Combat.Damageable>() ?? GetComponentInParent<Hazze.Gameplay.Combat.Damageable>();
             }
             return context && movement && body;
         }

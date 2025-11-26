@@ -27,6 +27,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         private const float BlockAngleRight = 110f;
         private const float BlockAngleRightStationary = 165f;
         private const float BlockAngleLeft = 250f;
+        private const float BlockAngleLeftStationary = 230f;
 
         private void Reset()
         {
@@ -167,9 +168,9 @@ namespace Hazze.Gameplay.Characters.Nitss
             float angle = visual.localEulerAngles.y;
             bool facingRight = movementController.FacingDirection.x >= 0f;
             float primary = facingRight ? BlockAngleRight : BlockAngleLeft;
-            float secondary = facingRight ? BlockAngleRightStationary : BlockAngleLeft;
+            float secondary = facingRight ? BlockAngleRightStationary : BlockAngleLeftStationary;
             float deltaPrimary = Mathf.Abs(Mathf.DeltaAngle(angle, primary));
-            float deltaSecondary = facingRight ? Mathf.Abs(Mathf.DeltaAngle(angle, secondary)) : float.PositiveInfinity;
+            float deltaSecondary = Mathf.Abs(Mathf.DeltaAngle(angle, secondary));
             float delta = Mathf.Min(deltaPrimary, deltaSecondary);
             return delta <= blockAngleTolerance;
         }

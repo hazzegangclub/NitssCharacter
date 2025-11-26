@@ -1,3 +1,27 @@
+# NitssCharacter 0.4.5 (2025-11-25)
+
+Knockdown system, death animations, damage system refinement, and hit detection improvements.
+
+## Highlights
+- KnockdownController: Stamina-based knockdown system (100 max, 15 light/50 heavy cost, 20 regen/s)
+- Death animations: Separate triggers for light (KnockDown_B_Light) and heavy (KnockDown_B_Heavy) attacks
+- WakeUp invulnerability: 3s protection (2s knockdown + 1s wakeup) prevents animation interruption
+- Damage animations: Blend Tree system with DamageLevel parameter (0=light, 1=heavy)
+- Hit detection: Fixed double-hit issue with improved stage-based blocking in DynamicWeaponHitbox
+- Animation flow: Prevents damage animations during knockdown and death states
+
+## Fixes
+- Resolved double-hit bug when attacker is very close to target
+- Fixed damage animations interrupting death/knockdown sequences
+- Corrected death animation not playing for light attacks
+- Improved invulnerability system to protect WakeUp animation
+
+## Technical
+- KnockdownController: IsKnockedDown, IsDead, IsInvulnerableWakeUp properties
+- Damageable: Integrated with KnockdownController for stamina management and animation blocking
+- DynamicWeaponHitbox: Simplified hit prevention using stage-based HashSet
+- Blend Tree support: DamageLevel float parameter for damage animation selection
+
 # NitssCharacter 0.4.4 (2025-11-22)
 Consolida o combo aéreo com lógica simplificada, integra uppercut independente e sincroniza todos os módulos com o projeto principal.
 ## Highlights
@@ -97,3 +121,4 @@ Initial Nitss character package for Unity via UPM.
 
 ## Removed
 - Dash functionality removed from movement controller
+

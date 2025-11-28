@@ -439,5 +439,27 @@ namespace Hazze.Gameplay.Characters.Nitss
             staggerTimer = Mathf.Max(staggerTimer, duration);
             isBlocking = false;
         }
+
+        /// <summary>
+        /// Dispara manualmente o evento AttackStageStarted.
+        /// Usado por módulos externos como JumpAttackModule para notificar hitboxes.
+        /// </summary>
+        public void NotifyAttackStageStarted(int stage, bool isAir)
+        {
+            AttackStageStarted?.Invoke(stage, isAir);
+            if (enableDebugLogs)
+                Debug.Log($"[CombatController] AttackStageStarted notificado manualmente: stage={stage}, isAir={isAir}");
+        }
+
+        /// <summary>
+        /// Dispara manualmente o evento AttackStageEnded.
+        /// Usado por módulos externos como JumpAttackModule para notificar hitboxes.
+        /// </summary>
+        public void NotifyAttackStageEnded(int stage, bool isAir)
+        {
+            AttackStageEnded?.Invoke(stage, isAir);
+            if (enableDebugLogs)
+                Debug.Log($"[CombatController] AttackStageEnded notificado manualmente: stage={stage}, isAir={isAir}");
+        }
     }
 }

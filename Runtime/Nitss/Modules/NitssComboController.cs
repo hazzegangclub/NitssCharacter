@@ -57,6 +57,14 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField, Tooltip("Delay antes de aplicar o lançamento vertical (s). Use para sincronizar com o momento do golpe na animação.")]
         private float uppercutLaunchDelay = 0.3f;
 
+        [Header("Uppercut Auto-Follow")]
+        [SerializeField, Tooltip("Ativa pulo automático após acertar uppercut do combo.")]
+        private bool autoFollowOnUppercut = true;
+        [SerializeField, Tooltip("Velocidade do pulo automático (m/s).")]
+        private float autoFollowJumpVelocity = 8f;
+        [SerializeField, Tooltip("Delay antes de executar o pulo automático (s).")]
+        private float autoFollowDelay = 0.1f;
+
         [Header("Regras")]
         [SerializeField, Tooltip("Permite iniciar combo no ar.")]
         private bool allowAirStart = true;
@@ -79,6 +87,8 @@ namespace Hazze.Gameplay.Characters.Nitss
         private float upBufferTimer;
         private float groundGraceTimer;
         private float uppercutCooldownTimer;
+        private bool uppercutHitThisCombo;
+        private Coroutine autoFollowCoroutine;
         
         // Controles
         private bool wasAirborneLastFrame;
@@ -139,6 +149,13 @@ namespace Hazze.Gameplay.Characters.Nitss
             attackBufferTimer = 0f;
             upBufferTimer = 0f;
             uppercutCooldownTimer = 0f;
+            uppercutHitThisCombo = false;
+            
+            if (autoFollowCoroutine != null)
+            {
+                StopCoroutine(autoFollowCoroutine);
+                autoFollowCoroutine = null;
+            }
         }
 
         public void Tick(float dt, NitssInputReader reader)
@@ -429,6 +446,14 @@ namespace Hazze.Gameplay.Characters.Nitss
             trackedStage = stage;
             comboActive = true;
             comboWindowTimer = comboInputWindow;
+            
+            // Reseta flag de uppercut hit quando novo combo começa (stage 1)
+            if (stage == 1)
+            {
+                uppercutHitThisCombo = false;
+                if (enableDebugLogs)
+                    Debug.Log($"[NitssCombo] Novo combo iniciado - resetando flag uppercutHitThisCombo");
+            }
 
             if (enableDebugLogs)
                 Debug.Log($"[NitssCombo] Stage {stage} iniciado (Air: {isAir})");
@@ -459,6 +484,81 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (crouchModule == null) crouchModule = GetComponent<NitssCrouchModule>();
 
             return context != null && combatController != null && movementController != null;
+        }
+
+        /// <summary>
+        /// Chamado pelo DynamicWeaponHitbox quando uppercut do combo acerta.
+        /// Inicia o auto-follow jump se configurado.
+        /// </summary>
+        public void OnUppercutHitCombo()
+        {
+            Debug.Log($"[NitssCombo] OnUppercutHitCombo chamado! autoFollowEnabled={autoFollowOnUppercut}, alreadyHit={uppercutHitThisCombo}");
+            
+            if (!autoFollowOnUppercut)
+            {
+                Debug.Log($"[NitssCombo] AUTO-FOLLOW desabilitado nas configurações.");
+                return;
+            }
+            
+            if (uppercutHitThisCombo)
+            {
+                Debug.Log($"[NitssCombo] AUTO-FOLLOW já foi acionado neste combo.");
+                return;
+            }
+
+            uppercutHitThisCombo = true;
+
+            if (autoFollowCoroutine != null)
+                StopCoroutine(autoFollowCoroutine);
+
+            autoFollowCoroutine = StartCoroutine(PerformAutoFollowJump());
+
+            Debug.Log($"[NitssCombo] AUTO-FOLLOW iniciado! Aguardando {autoFollowDelay}s para pular com velocidade {autoFollowJumpVelocity}m/s");
+        }
+
+        /// <summary>
+        /// Coroutina que executa o pulo automático após delay configurado.
+        /// </summary>
+        private System.Collections.IEnumerator PerformAutoFollowJump()
+        {
+            yield return new WaitForSeconds(autoFollowDelay);
+
+            if (enableDebugLogs)
+                Debug.Log($"[NitssCombo] AUTO-FOLLOW delay concluído ({autoFollowDelay}s). Tentando aplicar pulo...");
+
+            if (jumpModule != null && movementController != null)
+            {
+                // Busca Rigidbody no root do personagem (onde está o MovementController)
+                Rigidbody rb = movementController.GetComponent<Rigidbody>();
+                
+                if (rb != null)
+                {
+                    Vector3 currentVel = rb.linearVelocity;
+                    rb.linearVelocity = new Vector3(currentVel.x, autoFollowJumpVelocity, currentVel.z);
+                    
+                    Debug.Log($"[NitssCombo] AUTO-FOLLOW pulo executado! Velocidade aplicada: {autoFollowJumpVelocity}m/s (anterior: {currentVel.y}m/s)");
+                }
+                else
+                {
+                    Debug.LogWarning($"[NitssCombo] AUTO-FOLLOW falhou: Rigidbody não encontrado no MovementController!");
+                }
+
+                // Marca como airborne para combo
+                movementController.ForceAirborneStateForCombo();
+                
+                // Habilita jump attack após auto-follow
+                if (jumpAttackModule != null)
+                {
+                    jumpAttackModule.ForceArmCombo();
+                    Debug.Log($"[NitssCombo] Jump Attack armado após auto-follow!");
+                }
+            }
+            else
+            {
+                Debug.LogWarning($"[NitssCombo] AUTO-FOLLOW falhou: jumpModule={jumpModule != null}, movementController={movementController != null}");
+            }
+
+            autoFollowCoroutine = null;
         }
     }
 }

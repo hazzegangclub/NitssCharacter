@@ -13,6 +13,7 @@ namespace Hazze.Gameplay.Characters.Nitss
         [SerializeField] private NitssCharacterContext context;
         [SerializeField] private NitssAnimatorController animatorController;
         [SerializeField] private NitssMovementController movementController;
+        [SerializeField] private NitssCombatController combatController;
         [SerializeField] private NitssInputReader inputReader;
         [SerializeField] private NitssJumpModule jumpModule;
         [SerializeField] private Rigidbody body;
@@ -53,6 +54,7 @@ namespace Hazze.Gameplay.Characters.Nitss
             context = GetComponent<NitssCharacterContext>();
             animatorController = context ? context.AnimatorController : GetComponentInChildren<NitssAnimatorController>();
             movementController = GetComponent<NitssMovementController>();
+            combatController = GetComponent<NitssCombatController>();
             inputReader = GetComponent<NitssInputReader>();
             jumpModule = GetComponent<NitssJumpModule>();
             body = GetComponent<Rigidbody>();
@@ -193,9 +195,24 @@ namespace Hazze.Gameplay.Characters.Nitss
             ApplyImpulse();
             movementController.ForceAirborneStateForCombo();
 
+            // Agenda finalização do stage após pequeno delay para dar tempo do hitbox detectar
+            int airStage = 10 + nextStage;
+            StartCoroutine(EndStageAfterDelay(airStage, 0.3f));
+
             if (nextStage >= 3)
             {
                 FinishCombo();
+            }
+        }
+
+        private System.Collections.IEnumerator EndStageAfterDelay(int stage, float delay)
+        {
+            yield return new WaitForSeconds(delay);
+            
+            if (combatController != null)
+            {
+                combatController.NotifyAttackStageEnded(stage, true);
+                Log($"Combat controller notificado: stage {stage} finalizado");
             }
         }
 
@@ -212,6 +229,15 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (animatorController == null)
             {
                 return;
+            }
+
+            // Notifica combat controller para ativar hitbox com stages específicos para air attacks
+            // JumpAttack1=11, JumpAttack2=12, JumpAttack3=13
+            int airStage = 10 + stage;
+            if (combatController != null)
+            {
+                combatController.NotifyAttackStageStarted(airStage, true);
+                Log($"Combat controller notificado: stage {airStage} iniciado (Air=true)");
             }
 
             string trigger = stage switch
@@ -256,6 +282,10 @@ namespace Hazze.Gameplay.Characters.Nitss
             {
                 movementController = GetComponent<NitssMovementController>();
             }
+            if (combatController == null)
+            {
+                combatController = GetComponent<NitssCombatController>();
+            }
             if (inputReader == null)
             {
                 inputReader = GetComponent<NitssInputReader>();
@@ -277,6 +307,18 @@ namespace Hazze.Gameplay.Characters.Nitss
             if (debugLogging)
             {
                 Debug.Log($"[NitssJumpAttackModule] {message}");
+            }
+        }
+
+        /// <summary>
+        /// Força o arme do combo aéreo (usado após auto-follow do uppercut).
+        /// </summary>
+        public void ForceArmCombo()
+        {
+            if (!usedThisAirborne)
+            {
+                ArmCombo();
+                Log("Combo aéreo FORÇADO após auto-follow");
             }
         }
     }

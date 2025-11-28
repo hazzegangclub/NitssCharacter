@@ -324,7 +324,8 @@ namespace Hazze.Gameplay.Combat
             if (knockdownController != null && knockdownController.IsDead) return; // Invulnerável quando morto
             if (knockdownController != null && knockdownController.IsInvulnerableWakeUp) return; // Invulnerável durante WakeUp
             bool inKnockdown = locomotion != null && locomotion.IsKnockedDown;
-            if (preventDamageWhileKnockedDown && inKnockdown) return;
+            // Permite dano no ar durante air juggle
+            if (preventDamageWhileKnockedDown && inKnockdown && !_isInAirJuggle) return;
             if (useInvulnerability && iFrameTimer > 0f) return;
 
             float applied = amount;
@@ -357,7 +358,8 @@ namespace Hazze.Gameplay.Combat
             if (knockdownController != null && knockdownController.IsDead) return; // Invulnerável quando morto
             if (knockdownController != null && knockdownController.IsInvulnerableWakeUp) return; // Invulnerável durante WakeUp
             bool inKnockdown = locomotion != null && locomotion.IsKnockedDown;
-            if (preventDamageWhileKnockedDown && inKnockdown) return;
+            // Permite dano no ar durante air juggle
+            if (preventDamageWhileKnockedDown && inKnockdown && !_isInAirJuggle) return;
 
             int attackerId = attackerTag ? attackerTag.GetInstanceID() : 0;
             bool bypassIFrames = false;
@@ -412,7 +414,8 @@ namespace Hazze.Gameplay.Combat
         {
             if (amount <= 0f || !IsAlive) return;
             bool inKnockdown = locomotion != null && locomotion.IsKnockedDown;
-            if (preventDamageWhileKnockedDown && inKnockdown) return;
+            // Permite dano no ar durante air juggle
+            if (preventDamageWhileKnockedDown && inKnockdown && !_isInAirJuggle) return;
             if (useInvulnerability && iFrameTimer > 0f) return;
 
             float applied = amount;

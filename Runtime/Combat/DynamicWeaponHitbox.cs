@@ -23,6 +23,27 @@ public struct LaunchConfig
 }
 
 /// <summary>
+/// Configuração de lançamento direcional (spike) para um stage específico.
+/// Usado para ataques que arremessam o oponente em ângulo (ex: JumpAttack3 spike down).
+/// </summary>
+[System.Serializable]
+public struct SpikeConfig
+{
+    [Tooltip("Stage que aplica este spike (0 = desabilitado).")]
+    public int stageIndex;
+    
+    [Tooltip("Velocidade do spike (m/s).")]
+    public float spikeVelocity;
+    
+    [Tooltip("Ângulo do spike em graus (0° = horizontal para frente, 90° = para baixo, 180° = para trás). 130° recomendado para spike down diagonal.")]
+    [Range(0f, 180f)]
+    public float spikeAngleDegrees;
+    
+    [Tooltip("Se verdadeiro, inicia air juggle no alvo após o spike.")]
+    public bool startAirJuggle;
+}
+
+/// <summary>
 /// Hitbox dinâmico que segue o movimento real do bastão/arma.
 /// 1) Cada frame gera uma cápsula entre base e ponta da arma.
 /// 2) Opcionalmente faz um sweep (SphereCast) da ponta anterior até a ponta atual para pegar trajetórias rápidas.
@@ -39,7 +60,7 @@ public class DynamicWeaponHitbox : MonoBehaviour
     [Tooltip("Transform na ponta da arma (ex.: extremidade do bastão).")] public Transform weaponTip;
 
     [Header("Configuração de Estágios")]
-    [Tooltip("Quais estágios usam este hitbox dinâmico.")] public int[] stages = new int[] { 1, 2, 3, 4 };
+    [Tooltip("Quais estágios usam este hitbox dinâmico.")] public int[] stages = new int[] { 1, 2, 3, 4, 11, 12, 13 };
     [Tooltip("Dano por estágio (tamanho deve cobrir maior índice requerido). Se vazio cai em defaultDamage.")] public float[] damagePerStage = System.Array.Empty<float>();
     [Tooltip("Dano padrão quando não houver entrada dedicada.")] public float defaultDamage = 10f;
     [Tooltip("Marcar estágio como heavy (knockdown/stamina) – índices 1..n.")] public bool[] heavyStageFlags = System.Array.Empty<bool>();
@@ -72,6 +93,13 @@ public class DynamicWeaponHitbox : MonoBehaviour
     public LaunchConfig[] launchConfigs = new LaunchConfig[]
     {
         new LaunchConfig { stageIndex = 4, launchVelocity = 8f, maxHeight = 5f, requiresCombo = true }
+    };
+    
+    [Header("Directional Spike System")]
+    [Tooltip("Configurações de spike direcional por stage. Para ataques que arremessam em ângulo (ex: JumpAttack3).")]
+    public SpikeConfig[] spikeConfigs = new SpikeConfig[]
+    {
+        new SpikeConfig { stageIndex = 13, spikeVelocity = 15f, spikeAngleDegrees = 130f, startAirJuggle = true }
     };
     
     [Header("Uppercut Follow-Up Auto (Opcional)")]
@@ -139,14 +167,28 @@ public class DynamicWeaponHitbox : MonoBehaviour
 
     private void HandleStageStart(int stage, bool isAir)
     {
-        if (!EnabledForStage(stage)) return;
-        if (!weaponBase || !weaponTip) return;
+        Debug.Log($"[DynamicWeaponHitbox] HandleStageStart chamado! stage={stage}, isAir={isAir}");
+        
+        if (!EnabledForStage(stage))
+        {
+            Debug.Log($"[DynamicWeaponHitbox] Stage {stage} NÃO está habilitado no array 'stages'. Ignorando...");
+            return;
+        }
+        
+        if (!weaponBase || !weaponTip)
+        {
+            Debug.LogWarning($"[DynamicWeaponHitbox] weaponBase ou weaponTip é NULL! Hitbox desabilitado.");
+            return;
+        }
+        
         _active = true;
         _currentStage = stage;
         _currentStageIsAir = isAir;
         _hitThisStage.Clear();
         _prevTip = weaponTip.position;
         _attackerRoot = locomotion ? locomotion.transform.root : (combat ? combat.transform.root : transform.root);
+        
+        Debug.Log($"[DynamicWeaponHitbox] HITBOX ATIVADO! Stage={stage}, Air={isAir}, AttackerRoot={_attackerRoot?.name}");
     }
 
     private void HandleStageEnd(int stage, bool isAir)
@@ -315,39 +357,153 @@ public class DynamicWeaponHitbox : MonoBehaviour
             var targetLocomotion = c.GetComponentInParent<NitssLocomotionController>() ?? c.GetComponent<NitssLocomotionController>();
             if (targetLocomotion)
             {
-                // Se tem delay e é uppercut de combo, aplica hit sem lançamento primeiro e agenda o lançamento
-                float launchDelay = (isUppercutFromCombo && _comboController != null) ? _comboController.UppercutLaunchDelay : 0f;
+                Debug.Log($"[DynamicWeaponHitbox] Verificando spike config para Stage={_currentStage}");
                 
-                var hitInfo = new NitssLocomotionController.HitInfo
+                // Verifica se há spike configurado para este stage
+                SpikeConfig? spikeConfig = null;
+                if (spikeConfigs != null && spikeConfigs.Length > 0)
                 {
-                    damage = damage,
-                    heavy = heavy,
-                    ignoresStamina = false,
-                    attackerWorldPos = attackerPos,
-                    isProjectile = false,
-                    verticalLaunchVelocity = launchDelay > 0f ? 0f : verticalLaunch, // Se tem delay, não lança agora
-                    maxLaunchHeight = launchDelay > 0f ? 0f : maxLaunchHeight,
-                    suppressPlanarPush = false,
-                    planarLaunchSpeed = 0f
-                };
-                targetLocomotion.OnHit(in hitInfo);
+                    Debug.Log($"[DynamicWeaponHitbox] {spikeConfigs.Length} spike configs encontrados");
+                    foreach (var cfg in spikeConfigs)
+                    {
+                        Debug.Log($"[DynamicWeaponHitbox] Verificando spike config: stageIndex={cfg.stageIndex}, velocity={cfg.spikeVelocity}, angle={cfg.spikeAngleDegrees}");
+                        if (cfg.stageIndex == _currentStage)
+                        {
+                            spikeConfig = cfg;
+                            Debug.Log($"[DynamicWeaponHitbox] SPIKE CONFIG ENCONTRADO para stage {_currentStage}!");
+                            break;
+                        }
+                    }
+                }
+                else
+                {
+                    Debug.Log($"[DynamicWeaponHitbox] Nenhum spike config disponível (array null ou vazio)");
+                }
                 
-                // Agenda lançamento com delay se necessário
-                if (launchDelay > 0f && verticalLaunch > 0f)
+                // Se tem spike, aplica spike direcional ao invés de lançamento vertical
+                if (spikeConfig.HasValue)
                 {
-                    StartCoroutine(ApplyDelayedLaunch(targetLocomotion, verticalLaunch, maxLaunchHeight, launchDelay, dmg, heavy));
-                    Debug.Log($"[DynamicWeaponHitbox] Uppercut hit aplicado. Launch agendado para {launchDelay}s depois.");
+                    var cfg = spikeConfig.Value;
+                    
+                    // Calcula direção do spike baseado no ângulo
+                    // 0° = horizontal para frente, 45° = diagonal down-forward, 90° = vertical para baixo
+                    // Para spike diagonal: 45° funciona bem (meio termo entre frente e baixo)
+                    float angleRad = cfg.spikeAngleDegrees * Mathf.Deg2Rad;
+                    
+                    // Usa direção do atacante para o alvo (não depende de rotação)
+                    Vector3 attackerToTarget = (c.transform.position - attackerRoot.position).normalized;
+                    attackerToTarget.y = 0; // Projeta no plano horizontal
+                    Vector3 horizontalDir = attackerToTarget.normalized;
+                    
+                    // Componente horizontal (direção do alvo) e vertical (down)
+                    float horizontalMag = Mathf.Cos(angleRad);
+                    float verticalMag = Mathf.Sin(angleRad);
+                    
+                    // Direção: direção do alvo * horizontal + down * vertical
+                    Vector3 spikeDirection = (horizontalDir * horizontalMag) + (Vector3.down * verticalMag);
+                    spikeDirection.Normalize();
+                    
+                    // Aplica velocidade direcional ao Rigidbody do alvo
+                    Rigidbody targetRb = targetLocomotion.GetComponent<Rigidbody>();
+                    if (targetRb != null)
+                    {
+                        Vector3 spikeVelocity = spikeDirection * cfg.spikeVelocity;
+                        targetRb.linearVelocity = spikeVelocity;
+                        Debug.Log($"[DynamicWeaponHitbox] ===== SPIKE APLICADO! ===== Stage={_currentStage}, Velocity={cfg.spikeVelocity}m/s, Angle={cfg.spikeAngleDegrees}°, Horizontal={horizontalMag:F2}, Vertical={verticalMag:F2}, Direction={spikeDirection}, FinalVelocity={spikeVelocity}, Target={targetRb.gameObject.name}");
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"[DynamicWeaponHitbox] SPIKE FALHOU - Rigidbody não encontrado em {targetLocomotion.gameObject.name}!");
+                    }
+                    
+                    // Inicia air juggle se configurado
+                    if (cfg.startAirJuggle && dmg != null)
+                    {
+                        dmg.StartAirJuggle(heavy);
+                        Debug.Log($"[DynamicWeaponHitbox] Air juggle iniciado após spike (heavy={heavy})");
+                    }
+                    
+                    // Hit sem lançamento vertical (spike já foi aplicado)
+                    var hitInfo = new NitssLocomotionController.HitInfo
+                    {
+                        damage = damage,
+                        heavy = heavy,
+                        ignoresStamina = false,
+                        attackerWorldPos = attackerPos,
+                        isProjectile = false,
+                        verticalLaunchVelocity = 0f,
+                        maxLaunchHeight = 0f,
+                        suppressPlanarPush = true, // Suprime push padrão, spike já foi aplicado
+                        planarLaunchSpeed = 0f
+                    };
+                    targetLocomotion.OnHit(in hitInfo);
                 }
-                // Log de lançamento vertical imediato
-                else if (verticalLaunch > 0f)
+                else
                 {
-                    string comboStatus = isUppercutFromCombo ? "COMBO" : "DIRETO";
-                    Debug.Log($"[DynamicWeaponHitbox] Launch aplicado ({comboStatus})! Stage={_currentStage}, Velocidade={verticalLaunch}m/s, Altura máx={maxLaunchHeight}m, Target={c.gameObject.name}");
-                    notifiedUppercutLaunch = true;
-                }
-                else if (isUppercutStage)
-                {
-                    Debug.Log($"[DynamicWeaponHitbox] Stage {_currentStage} sem lançamento (nenhuma config ativa)");
+                    // Lançamento vertical normal (uppercut, etc)
+                    // Se tem delay e é uppercut de combo, aplica hit sem lançamento primeiro e agenda o lançamento
+                    float launchDelay = (isUppercutFromCombo && _comboController != null) ? _comboController.UppercutLaunchDelay : 0f;
+                    
+                    // Para JumpAttacks (stages 11 e 12), aplica impulso vertical leve para manter oponente no ar
+                    bool isJumpAttack = (_currentStage == 11 || _currentStage == 12);
+                    float jumpAttackUpwardVelocity = isJumpAttack ? 5f : 0f; // 5 m/s para cima
+                    
+                    // Se é JumpAttack, aplica velocidade vertical diretamente ao Rigidbody
+                    if (isJumpAttack)
+                    {
+                        Rigidbody targetRb = targetLocomotion.GetComponent<Rigidbody>();
+                        if (targetRb != null)
+                        {
+                            Vector3 currentVel = targetRb.linearVelocity;
+                            targetRb.linearVelocity = new Vector3(currentVel.x, jumpAttackUpwardVelocity, currentVel.z);
+                            Debug.Log($"[DynamicWeaponHitbox] JumpAttack hit! Aplicando impulso vertical: {jumpAttackUpwardVelocity}m/s para manter no ar");
+                        }
+                        
+                        // Inicia/mantém air juggle
+                        if (dmg != null)
+                        {
+                            dmg.StartAirJuggle(heavy);
+                        }
+                    }
+                    
+                    var hitInfo = new NitssLocomotionController.HitInfo
+                    {
+                        damage = damage,
+                        heavy = heavy,
+                        ignoresStamina = false,
+                        attackerWorldPos = attackerPos,
+                        isProjectile = false,
+                        verticalLaunchVelocity = launchDelay > 0f ? 0f : verticalLaunch, // Se tem delay, não lança agora
+                        maxLaunchHeight = launchDelay > 0f ? 0f : maxLaunchHeight,
+                        suppressPlanarPush = isJumpAttack, // Suprime push em JumpAttacks (já aplicamos impulso manual)
+                        planarLaunchSpeed = 0f
+                    };
+                    targetLocomotion.OnHit(in hitInfo);
+                    
+                    // Notifica combo controller para auto-follow SEMPRE que uppercut do combo acertar
+                    if (isUppercutFromCombo && _comboController != null)
+                    {
+                        _comboController.OnUppercutHitCombo();
+                        Debug.Log($"[DynamicWeaponHitbox] Uppercut do combo conectou! Notificando ComboController para auto-follow.");
+                    }
+                    
+                    // Agenda lançamento com delay se necessário
+                    if (launchDelay > 0f && verticalLaunch > 0f)
+                    {
+                        StartCoroutine(ApplyDelayedLaunch(targetLocomotion, verticalLaunch, maxLaunchHeight, launchDelay, dmg, heavy));
+                        Debug.Log($"[DynamicWeaponHitbox] Uppercut hit aplicado. Launch agendado para {launchDelay}s depois.");
+                    }
+                    // Log de lançamento vertical imediato
+                    else if (verticalLaunch > 0f)
+                    {
+                        string comboStatus = isUppercutFromCombo ? "COMBO" : "DIRETO";
+                        Debug.Log($"[DynamicWeaponHitbox] Launch aplicado ({comboStatus})! Stage={_currentStage}, Velocidade={verticalLaunch}m/s, Altura máx={maxLaunchHeight}m, Target={c.gameObject.name}");
+                        notifiedUppercutLaunch = true;
+                    }
+                    else if (isUppercutStage)
+                    {
+                        Debug.Log($"[DynamicWeaponHitbox] Stage {_currentStage} sem lançamento (nenhuma config ativa)");
+                    }
                 }
                 
                 if (combat && combat.IsAirAttacking)
